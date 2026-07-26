@@ -191,7 +191,7 @@ switch ($route) {
         redirect_to('routers');
 
     case 'plans':
-        $plans = Database::fetchAll('SELECT p.*, COUNT(u.id) AS user_count FROM plans p LEFT JOIN ppp_users u ON u.plan_id=p.id GROUP BY p.id ORDER BY p.name');
+        $plans = Database::fetchAll('SELECT p.*,r.name AS router_name,COUNT(u.id) AS user_count FROM plans p LEFT JOIN routers r ON r.id=p.router_id LEFT JOIN ppp_users u ON u.plan_id=p.id GROUP BY p.id ORDER BY r.name,p.name');
         render('plans', compact('plans') + ['pageTitle' => tr('پلن‌ها', 'Plans')]);
         break;
 
@@ -202,6 +202,7 @@ switch ($route) {
         if ($id && !$plan) {
             redirect_to('plans');
         }
+        $routers = Database::fetchAll('SELECT id,name FROM routers WHERE is_active=1 ORDER BY name');
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             csrf_check();
             try {
@@ -211,15 +212,16 @@ switch ($route) {
                     strtoupper(trim((string) ($_POST['currency'] ?? 'IRR'))), (int) ($_POST['validity_days'] ?? 30),
                     ($_POST['data_cap_gb'] ?? '') === '' ? null : (int) $_POST['data_cap_gb'], isset($_POST['is_active']) ? 1 : 0,
                 ];
-                if ($values[0] === '' || $values[1] === '' || $values[2] === '' || $values[3] < 0 || $values[5] < 1) {
+                $planRouterId = max(0, (int) ($_POST['router_id'] ?? 0));
+                if ($planRouterId < 1 || $values[0] === '' || $values[1] === '' || $values[2] === '' || $values[3] < 0 || $values[5] < 1) {
                     throw new RuntimeException(tr('اطلاعات پلن معتبر نیست.', 'Plan details are invalid.'));
                 }
-                $syncedRouters = sync_plan_to_routers($values[1], $values[2], $values[5], $values[6], $values[3]);
+                $syncedRouters = sync_plan_to_router($planRouterId, $values[1], $values[2], $values[5], $values[6], $values[3]);
                 if ($id) {
-                    Database::execute('UPDATE plans SET name=?, mikrotik_profile=?, rate_limit=?, price=?, currency=?, validity_days=?, data_cap_gb=?, is_active=? WHERE id=?', [...$values, $id]);
+                    Database::execute('UPDATE plans SET router_id=?,name=?, mikrotik_profile=?, rate_limit=?, price=?, currency=?, validity_days=?, data_cap_gb=?, is_active=? WHERE id=?', [$planRouterId,...$values, $id]);
                     log_activity('plan_update', 'plan', $id, ['name' => $values[0]]);
                 } else {
-                    Database::execute('INSERT INTO plans (name,mikrotik_profile,rate_limit,price,currency,validity_days,data_cap_gb,is_active,created_at) VALUES (?,?,?,?,?,?,?,?,NOW())', $values);
+                    Database::execute('INSERT INTO plans (router_id,name,mikrotik_profile,rate_limit,price,currency,validity_days,data_cap_gb,is_active,created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())', [$planRouterId,...$values]);
                     $id = Database::id();
                     log_activity('plan_create', 'plan', $id, ['name' => $values[0]]);
                 }
@@ -231,7 +233,7 @@ switch ($route) {
                 $plan = array_merge($plan ?? [], $_POST);
             }
         }
-        render('plan_form', compact('plan', 'id') + ['pageTitle' => $id ? tr('ویرایش پلن', 'Edit plan') : tr('افزودن پلن', 'Add plan')]);
+        render('plan_form', compact('plan', 'id', 'routers') + ['pageTitle' => $id ? tr('ویرایش پلن', 'Edit plan') : tr('افزودن پلن', 'Add plan')]);
         break;
 
     case 'plan-delete':
@@ -272,7 +274,7 @@ switch ($route) {
             redirect_to('users');
         }
         $routers = Database::fetchAll('SELECT id,name FROM routers WHERE is_active=1 ORDER BY name');
-        $plans = Database::fetchAll('SELECT id,name,rate_limit,price,currency,validity_days FROM plans WHERE is_active=1 ORDER BY name');
+        $plans = Database::fetchAll('SELECT id,router_id,name,rate_limit,price,currency,validity_days FROM plans WHERE is_active=1 AND router_id IS NOT NULL ORDER BY name');
         if ($id && $_SERVER['REQUEST_METHOD'] !== 'POST') {
             try {
                 foreach (router_client(router_by_id((int) $user['router_id']))->listSecrets((string) $user['username']) as $remoteUser) {

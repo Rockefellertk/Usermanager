@@ -47,6 +47,7 @@ require APP_ROOT . '/app/Services.php';
 
 try {
     Database::connect($config['db']);
+    Database::upgradeSchema();
 } catch (Throwable $exception) {
     http_response_code(500);
     if (!empty($config['app']['debug'])) {
@@ -67,4 +68,3 @@ set_exception_handler(static function (Throwable $exception) use ($config): void
     }
     echo '<!doctype html><meta charset="utf-8"><div style="font-family:sans-serif;max-width:700px;margin:60px auto;padding:24px;border:1px solid #ddd;border-radius:12px">' . e($message) . '</div>';
 });
-

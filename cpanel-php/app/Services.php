@@ -63,24 +63,20 @@ function user_manager_remote_id(MikrotikClient $client, array $user): string
     throw new RuntimeException(tr('کاربر در User Manager روتر پیدا نشد؛ ابتدا همگام‌سازی کنید.', 'User was not found in RouterOS User Manager; synchronize first.'));
 }
 
-function sync_plan_to_routers(string $profileName, string $rateLimit, int $validityDays, ?int $dataCapGb, float $price): array
+function sync_plan_to_router(int $routerId, string $profileName, string $rateLimit, int $validityDays, ?int $dataCapGb, float $price): array
 {
-    $routers = Database::fetchAll('SELECT * FROM routers WHERE is_active = 1 ORDER BY id');
-    if (!$routers) {
-        throw new RuntimeException(tr('ابتدا یک روتر فعال اضافه کنید.', 'Add an active router first.'));
+    $router = router_by_id($routerId);
+    if (empty($router['is_active'])) {
+        throw new RuntimeException(tr('روتر انتخاب‌شده فعال نیست.', 'The selected router is not active.'));
     }
-    $synced = [];
-    foreach ($routers as $router) {
-        router_client($router)->saveProfile($profileName, $rateLimit, $validityDays, $dataCapGb, $price);
-        $synced[] = (string) $router['name'];
-    }
-    return $synced;
+    router_client($router)->saveProfile($profileName, $rateLimit, $validityDays, $dataCapGb, $price);
+    return [(string) $router['name']];
 }
 
 function create_ppp_user(array $input): array
 {
     $router = router_by_id((int) $input['router_id']);
-    $plan = Database::fetch('SELECT * FROM plans WHERE id = ? AND is_active = 1', [(int) $input['plan_id']]);
+    $plan = Database::fetch('SELECT * FROM plans WHERE id = ? AND router_id = ? AND is_active = 1', [(int) $input['plan_id'], (int) $input['router_id']]);
     if (!$plan) {
         throw new RuntimeException(tr('پلن معتبر نیست.', 'Invalid plan.'));
     }
@@ -134,7 +130,7 @@ function update_ppp_user(int $id, array $input): void
     if (!$user) {
         throw new RuntimeException(tr('کاربر پیدا نشد.', 'User not found.'));
     }
-    $plan = Database::fetch('SELECT * FROM plans WHERE id = ?', [(int) $input['plan_id']]);
+    $plan = Database::fetch('SELECT * FROM plans WHERE id = ? AND router_id = ?', [(int) $input['plan_id'], (int) $user['router_id']]);
     if (!$plan) {
         throw new RuntimeException(tr('پلن معتبر نیست.', 'Invalid plan.'));
     }
@@ -239,7 +235,7 @@ function routeros_validity_days(string $validity): int
     return max(1, (int) ceil($seconds / 86400));
 }
 
-function import_user_manager_catalog(MikrotikClient $client): int
+function import_user_manager_catalog(int $routerId, MikrotikClient $client): int
 {
     $profiles = $client->listProfiles();
     $limitations = [];
@@ -272,11 +268,11 @@ function import_user_manager_catalog(MikrotikClient $client): int
         $nameForUsers = trim((string) ($profile['name-for-users'] ?? '')) ?: $profileName;
         $validityDays = routeros_validity_days((string) ($profile['validity'] ?? 'unlimited'));
         $price = (float) ($profile['price'] ?? 0);
-        $existing = Database::fetch('SELECT id FROM plans WHERE mikrotik_profile = ? ORDER BY id LIMIT 1', [$profileName]);
+        $existing = Database::fetch('SELECT id FROM plans WHERE mikrotik_profile = ? AND (router_id=? OR router_id IS NULL) ORDER BY router_id DESC,id LIMIT 1', [$profileName, $routerId]);
         if ($existing) {
-            Database::execute('UPDATE plans SET name=?, rate_limit=?, price=?, validity_days=?, data_cap_gb=?, is_active=1 WHERE id=?', [$nameForUsers, $rateLimit, $price, $validityDays, $dataCapGb, $existing['id']]);
+            Database::execute('UPDATE plans SET router_id=?, name=?, rate_limit=?, price=?, validity_days=?, data_cap_gb=?, is_active=1 WHERE id=?', [$routerId, $nameForUsers, $rateLimit, $price, $validityDays, $dataCapGb, $existing['id']]);
         } else {
-            Database::execute('INSERT INTO plans (name,mikrotik_profile,rate_limit,price,currency,validity_days,data_cap_gb,is_active,created_at) VALUES (?,?,?,? ,"IRR",?,?,1,NOW())', [$nameForUsers, $profileName, $rateLimit, $price, $validityDays, $dataCapGb]);
+            Database::execute('INSERT INTO plans (router_id,name,mikrotik_profile,rate_limit,price,currency,validity_days,data_cap_gb,is_active,created_at) VALUES (?,?,?,?,? ,"IRR",?,?,1,NOW())', [$routerId, $nameForUsers, $profileName, $rateLimit, $price, $validityDays, $dataCapGb]);
         }
         $count++;
     }
@@ -290,7 +286,7 @@ function sync_router(int $routerId): array
         $client = router_client($router);
         $remote = $client->listSecrets();
         $remoteProfiles = $client->listUserProfiles();
-        $catalogCount = import_user_manager_catalog($client);
+        $catalogCount = import_user_manager_catalog($routerId, $client);
     } catch (Throwable $exception) {
         Database::execute('UPDATE routers SET last_status = "offline" WHERE id = ?', [$routerId]);
         throw $exception;
@@ -311,7 +307,7 @@ function sync_router(int $routerId): array
         }
     }
     $locals = Database::fetchAll('SELECT * FROM ppp_users WHERE router_id = ?', [$routerId]);
-    $plans = Database::fetchAll('SELECT * FROM plans WHERE is_active = 1');
+    $plans = Database::fetchAll('SELECT * FROM plans WHERE is_active = 1 AND router_id = ?', [$routerId]);
     $plansByProfile = [];
     foreach ($plans as $plan) {
         $plansByProfile[(string) $plan['mikrotik_profile']] = $plan;

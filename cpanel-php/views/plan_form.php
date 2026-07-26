@@ -1,5 +1,6 @@
 <div class="page-head"><div><a class="back-link" href="<?= e(url('plans')) ?>">→ <?= e(tr('بازگشت به پلن‌ها','Back to plans')) ?></a><h1><?= e($pageTitle) ?></h1></div></div>
 <form method="post" class="panel form-panel"><?= csrf_field() ?><div class="form-section"><h2><?= e(tr('مشخصات سرویس','Service details')) ?></h2><div class="form-grid">
+<label><span><?= e(tr('روتر','Router')) ?> *</span><select name="router_id" required><option value=""><?= e(tr('انتخاب روتر','Select router')) ?></option><?php foreach($routers as $router):?><option value="<?= e($router['id']) ?>" <?= (int)($plan['router_id']??0)===(int)$router['id']?'selected':'' ?>><?= e($router['name']) ?></option><?php endforeach;?></select></label>
 <label><span><?= e(tr('نام پلن','Plan name')) ?> *</span><input name="name" value="<?= e($plan['name']??'') ?>" required></label>
 <label><span><?= e(tr('نام پروفایل در User Manager','User Manager profile name')) ?> *</span><input name="mikrotik_profile" dir="ltr" value="<?= e($plan['mikrotik_profile']??'') ?>" required></label>
 <label><span><?= e(tr('محدودیت سرعت','Rate limit')) ?> *</span><input name="rate_limit" dir="ltr" value="<?= e($plan['rate_limit']??'') ?>" placeholder="10M/2M" required><small><?= e(tr('فرمت RouterOS، نمونه: دانلود/آپلود','RouterOS format, e.g. download/upload')) ?></small></label>

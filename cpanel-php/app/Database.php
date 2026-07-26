@@ -61,5 +61,16 @@ final class Database
     {
         return (int) self::pdo()->lastInsertId();
     }
-}
 
+    public static function upgradeSchema(): void
+    {
+        $column = self::fetch("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='plans' AND COLUMN_NAME='router_id'");
+        if (!$column) {
+            self::execute('ALTER TABLE plans ADD COLUMN router_id BIGINT UNSIGNED NULL AFTER id, ADD KEY idx_plan_router (router_id)');
+            $routers = self::fetchAll('SELECT id FROM routers ORDER BY id LIMIT 2');
+            if (count($routers) === 1) {
+                self::execute('UPDATE plans SET router_id=? WHERE router_id IS NULL', [(int) $routers[0]['id']]);
+            }
+        }
+    }
+}

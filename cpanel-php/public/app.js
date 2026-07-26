@@ -34,6 +34,27 @@ document.querySelectorAll('[data-auto-filter]').forEach(function (form) {
     });
 });
 
+(function filterPlansByRouter() {
+    var routerSelect = document.querySelector('[data-router-select]');
+    var planSelect = document.querySelector('[data-plan-select]');
+    if (!routerSelect || !planSelect) return;
+    function updatePlans() {
+        var routerId = String(routerSelect.value || '');
+        var selectedStillValid = false;
+        Array.from(planSelect.options).forEach(function (option, index) {
+            if (index === 0) return;
+            var matches = routerId !== '' && option.dataset.routerId === routerId;
+            option.hidden = !matches;
+            option.disabled = !matches;
+            if (matches && option.selected) selectedStillValid = true;
+        });
+        if (!selectedStillValid) planSelect.value = '';
+        planSelect.disabled = routerId === '';
+    }
+    routerSelect.addEventListener('change', updatePlans);
+    updatePlans();
+})();
+
 (function enableLiveSync() {
     var urlMeta = document.querySelector('meta[name="live-sync-url"]');
     var csrfMeta = document.querySelector('meta[name="csrf-token"]');

@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS routers (
 
 CREATE TABLE IF NOT EXISTS plans (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    router_id BIGINT UNSIGNED NULL,
     name VARCHAR(100) NOT NULL,
     mikrotik_profile VARCHAR(100) NOT NULL,
     rate_limit VARCHAR(50) NOT NULL,
@@ -40,7 +41,9 @@ CREATE TABLE IF NOT EXISTS plans (
     data_cap_gb INT UNSIGNED NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    KEY idx_plan_active (is_active)
+    KEY idx_plan_active (is_active),
+    KEY idx_plan_router (router_id),
+    CONSTRAINT fk_plan_router FOREIGN KEY (router_id) REFERENCES routers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ppp_users (
