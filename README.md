@@ -1,5 +1,7 @@
 # MikroTik v7 UserManager Panel
 
+> **cPanel / PHP edition:** A standalone PHP 8.1 + MySQL rewrite that installs entirely from the browser (no SSH, Composer, Redis, Celery, or Python) is available in [`cpanel-php/`](cpanel-php/README_FA.md). A ready-to-upload ZIP is produced from that directory.
+
 A Django panel for managing MikroTik RouterOS v7 PPP users (PPPoE/PPTP/L2TP/SSTP),
 with billing/invoicing, bilingual (Persian/English) RTL UI, and background sync
 via Celery. See `MIKROTIK_USERMANAGER_GUIDE.md` for the full design rationale.

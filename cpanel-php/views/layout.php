@@ -33,12 +33,14 @@
         <div class="nav-label"><?= e(tr('مدیریت', 'Administration')) ?></div>
         <a class="nav-item <?= str_starts_with($route, 'admin') ? 'active' : '' ?>" href="<?= e(url('admins')) ?>"><span>♙</span><?= e(tr('مدیران', 'Administrators')) ?></a>
         <a class="nav-item <?= $route === 'activity' ? 'active' : '' ?>" href="<?= e(url('activity')) ?>"><span>◷</span><?= e(tr('گزارش فعالیت', 'Activity log')) ?></a>
+        <a class="nav-item <?= $route === 'system' ? 'active' : '' ?>" href="<?= e(url('system')) ?>"><span>⚙</span><?= e(tr('وضعیت سیستم', 'System status')) ?></a>
         <?php endif; ?>
     </nav>
     <div class="sidebar-help"><strong>RouterOS v7</strong><small><?= e(tr('نسخه PHP مخصوص cPanel', 'cPanel PHP edition')) ?></small></div>
 </aside>
 <div class="sidebar-backdrop" data-sidebar-backdrop></div>
-<main class="main-content">+    <?php foreach ($flashes as $flash): ?><div class="alert <?= e($flash['type']) ?>"><span><?= $flash['type'] === 'success' ? '✓' : ($flash['type'] === 'warning' ? '!' : '×') ?></span><div><?= e($flash['message']) ?></div><button type="button" data-dismiss>×</button></div><?php endforeach; ?>
+<main class="main-content">
+    <?php foreach ($flashes as $flash): ?><div class="alert <?= e($flash['type']) ?>"><span><?= $flash['type'] === 'success' ? '✓' : ($flash['type'] === 'warning' ? '!' : '×') ?></span><div><?= e($flash['message']) ?></div><button type="button" data-dismiss>×</button></div><?php endforeach; ?>
     <?= $content ?>
 </main>
 <?php else: ?>
@@ -48,7 +50,3 @@
 <script src="public/app.js?v=1"></script>
 </body>
 </html>
-@@
--<main class="main-content">\+    <?php foreach ($flashes as $flash): ?><div class="alert <?= e($flash['type']) ?>"><span><?= $flash['type'] === 'success' ? '✓' : ($flash['type'] === 'warning' ? '!' : '×') ?></span><div><?= e($flash['message']) ?></div><button type="button" data-dismiss>×</button></div><?php endforeach; ?>
-+<main class="main-content">
-+    <?php foreach ($flashes as $flash): ?><div class="alert <?= e($flash['type']) ?>"><span><?= $flash['type'] === 'success' ? '✓' : ($flash['type'] === 'warning' ? '!' : '×') ?></span><div><?= e($flash['message']) ?></div><button type="button" data-dismiss>×</button></div><?php endforeach; ?>
