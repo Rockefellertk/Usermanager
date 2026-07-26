@@ -28,7 +28,7 @@ function next_invoice_number(): string
 {
     $period = date('Ym');
     $statement = Database::pdo()->prepare(
-        'INSERT INTO invoice_counters (`year_month`, last_value) VALUES (?, LAST_INSERT_ID(1)) ON DUPLICATE KEY UPDATE last_value = LAST_INSERT_ID(last_value + 1)'
+        'INSERT INTO invoice_counters (period_key, counter_value) VALUES (?, LAST_INSERT_ID(1)) ON DUPLICATE KEY UPDATE counter_value = LAST_INSERT_ID(counter_value + 1)'
     );
     $statement->execute([$period]);
     $number = (int) Database::pdo()->lastInsertId();

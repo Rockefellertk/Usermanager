@@ -71,8 +71,8 @@ CREATE TABLE IF NOT EXISTS ppp_users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS invoice_counters (
-    `year_month` CHAR(6) PRIMARY KEY,
-    last_value INT UNSIGNED NOT NULL DEFAULT 0
+    period_key CHAR(6) PRIMARY KEY,
+    counter_value INT UNSIGNED NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS invoices (
