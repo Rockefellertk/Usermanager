@@ -98,7 +98,7 @@ function create_ppp_user(array $input): array
             ]
         );
         $userId = Database::id();
-        $remote = $client->createSecret($input['username'], $input['password'], $plan['mikrotik_profile'], $input['service'], 'panel:' . $userId);
+        $remote = $client->createSecret($input['username'], $input['password'], $plan['mikrotik_profile'], $input['service'], 'panel:' . $userId, (int) ($input['shared_users'] ?? 1));
         $remoteId = (string) ($remote['.id'] ?? $remote['ret'] ?? '');
         if ($remoteId === '') {
             $matches = $client->listSecrets($input['username']);
@@ -150,6 +150,7 @@ function update_ppp_user(int $id, array $input): void
     if ($rateLimit !== (string) $user['rate_limit']) {
         $remoteFields['rate-limit'] = $rateLimit;
     }
+    $remoteFields['shared-users'] = (string) max(1, (int) ($input['shared_users'] ?? 1));
     if ($remoteFields) {
         $client = router_client($router);
         $client->setSecret(user_manager_remote_id($client, $user), $remoteFields);
@@ -215,7 +216,16 @@ function delete_ppp_user(int $id): void
         return;
     }
     $client = router_client(router_by_id((int) $user['router_id']));
-    $client->removeSecret(user_manager_remote_id($client, $user));
+    try {
+        $client->removeSecret(user_manager_remote_id($client, $user));
+    } catch (RuntimeException $exception) {
+        if ($exception instanceof MikrotikException) {
+            throw $exception;
+        }
+        // The user was already removed from User Manager. The stale local row
+        // must still be removable from the web panel.
+        log_activity('user_delete_local_only', 'ppp_user', $id, ['username' => $user['username']]);
+    }
     Database::execute('DELETE FROM ppp_users WHERE id = ?', [$id]);
     log_activity('user_delete', 'ppp_user', $id, ['username' => $user['username']]);
 }

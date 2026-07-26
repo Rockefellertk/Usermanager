@@ -230,7 +230,9 @@ switch ($route) {
         $routerId = max(0, (int) ($_GET['router'] ?? 0));
         $where = ['1=1']; $params = [];
         if ($search !== '') { $where[] = '(u.username LIKE ? OR u.full_name LIKE ? OR u.phone LIKE ?)'; $like = '%' . $search . '%'; array_push($params, $like, $like, $like); }
-        if ($status !== '') { $where[] = 'u.status = ?'; $params[] = $status; }
+        if ($status === 'online') {
+            $where[] = 'EXISTS(SELECT 1 FROM active_sessions sx WHERE sx.router_id=u.router_id AND sx.username=u.username AND sx.last_seen_at > DATE_SUB(NOW(), INTERVAL 2 MINUTE))';
+        } elseif ($status !== '') { $where[] = 'u.status = ?'; $params[] = $status; }
         if ($routerId) { $where[] = 'u.router_id = ?'; $params[] = $routerId; }
         $whereSql = implode(' AND ', $where);
         $page = page_number(); $perPage = 25; $offset = ($page - 1) * $perPage;
@@ -252,6 +254,18 @@ switch ($route) {
         }
         $routers = Database::fetchAll('SELECT id,name FROM routers WHERE is_active=1 ORDER BY name');
         $plans = Database::fetchAll('SELECT id,name,rate_limit,price,currency,validity_days FROM plans WHERE is_active=1 ORDER BY name');
+        if ($id && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+            try {
+                foreach (router_client(router_by_id((int) $user['router_id']))->listSecrets((string) $user['username']) as $remoteUser) {
+                    if (($remoteUser['name'] ?? '') === $user['username']) {
+                        $user['shared_users'] = max(1, (int) ($remoteUser['shared-users'] ?? 1));
+                        break;
+                    }
+                }
+            } catch (Throwable) {
+                $user['shared_users'] = 1;
+            }
+        }
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             csrf_check();
             try {
@@ -261,6 +275,7 @@ switch ($route) {
                     'service' => (string) ($_POST['service'] ?? 'pppoe'), 'rate_limit' => trim((string) ($_POST['rate_limit'] ?? '')),
                     'full_name' => trim((string) ($_POST['full_name'] ?? '')), 'phone' => trim((string) ($_POST['phone'] ?? '')),
                     'address' => trim((string) ($_POST['address'] ?? '')), 'comment' => trim((string) ($_POST['comment'] ?? '')),
+                    'shared_users' => max(1, min(100, (int) ($_POST['shared_users'] ?? 1))),
                 ];
                 if ((!$id && (!clean_username($input['username']) || $input['password'] === '')) || $input['plan_id'] < 1 || !in_array($input['service'], ['pppoe','pptp','l2tp','sstp','any'], true)) {
                     throw new RuntimeException(tr('اطلاعات کاربر کامل یا معتبر نیست.', 'User details are incomplete or invalid.'));
@@ -339,6 +354,24 @@ switch ($route) {
         $payments=Database::fetchAll('SELECT p.*,a.username received_by_name FROM payments p LEFT JOIN admins a ON a.id=p.received_by WHERE p.invoice_id=? ORDER BY p.id DESC',[$id]);
         render('invoice_detail',compact('invoice','payments')+['pageTitle'=>$invoice['invoice_number']]);
         break;
+
+    case 'invoice-delete':
+        require_write(); csrf_check();
+        $id = (int) ($_POST['id'] ?? 0);
+        $invoice = Database::fetch('SELECT invoice_number FROM invoices WHERE id=?', [$id]);
+        if ($invoice) {
+            $pdo = Database::pdo(); $pdo->beginTransaction();
+            try {
+                Database::execute('DELETE FROM payments WHERE invoice_id=?', [$id]);
+                Database::execute('DELETE FROM invoices WHERE id=?', [$id]);
+                log_activity('invoice_delete', 'invoice', $id, ['number' => $invoice['invoice_number']]);
+                $pdo->commit(); flash('success', tr('فاکتور حذف شد.', 'Invoice deleted.'));
+            } catch (Throwable $exception) {
+                if ($pdo->inTransaction()) { $pdo->rollBack(); }
+                flash('error', $exception->getMessage());
+            }
+        }
+        redirect_to('invoices');
 
     case 'report':
         $report=[

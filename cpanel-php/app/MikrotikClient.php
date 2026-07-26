@@ -116,9 +116,9 @@ final class MikrotikClient
         return is_array($result) ? $result : [];
     }
 
-    public function createSecret(string $name, string $password, string $profile, string $service, string $comment = ''): array
+    public function createSecret(string $name, string $password, string $profile, string $service, string $comment = '', int $sharedUsers = 1): array
     {
-        $payload = ['name' => $name, 'password' => $password];
+        $payload = ['name' => $name, 'password' => $password, 'shared-users' => (string) max(1, $sharedUsers)];
         if ($comment !== '') {
             $payload['comment'] = $comment;
         }
