@@ -69,6 +69,9 @@ final class MikrotikClient
                 if ($status >= 400) {
                     $decoded = json_decode((string) $body, true);
                     $message = is_array($decoded) ? ($decoded['message'] ?? $decoded['error'] ?? ('HTTP ' . $status)) : ('HTTP ' . $status);
+                    if (is_array($decoded) && !empty($decoded['detail'])) {
+                        $message .= ': ' . $decoded['detail'];
+                    }
                     throw new MikrotikException((string) $message, $status);
                 }
                 if ($body === '' || $status === 204) {
@@ -95,6 +98,16 @@ final class MikrotikClient
         // whether the problem is routing, firewall, TLS, credentials or policy.
         $this->request('GET', '/rest/system/resource');
         return true;
+    }
+
+    private function recordId(string $id): string
+    {
+        // RouterOS REST record IDs are path tokens such as *A. Encoding the
+        // asterisk as %2A makes some RouterOS versions return HTTP 400.
+        if (preg_match('/^\*[A-Za-z0-9]+$/', $id)) {
+            return $id;
+        }
+        return rawurlencode($id);
     }
 
     public function listSecrets(?string $name = null): array
@@ -134,7 +147,7 @@ final class MikrotikClient
         if (!$fields) {
             return [];
         }
-        $result = $this->request('PATCH', '/rest/user-manager/user/' . rawurlencode($id), $fields);
+        $result = $this->request('PATCH', '/rest/user-manager/user/' . $this->recordId($id), $fields);
         return is_array($result) ? $result : [];
     }
 
@@ -154,7 +167,7 @@ final class MikrotikClient
             foreach ($this->listUserProfiles() as $assignment) {
                 if (($assignment['user'] ?? '') === $username && !empty($assignment['.id'])) {
                     try {
-                        $this->request('DELETE', '/rest/user-manager/user-profile/' . rawurlencode((string) $assignment['.id']));
+                        $this->request('DELETE', '/rest/user-manager/user-profile/' . $this->recordId((string) $assignment['.id']));
                     } catch (MikrotikException) {
                         // Used profile history can be immutable. User deletion below
                         // will either cascade it or return the actual RouterOS error.
@@ -162,7 +175,7 @@ final class MikrotikClient
                 }
             }
         }
-        $this->request('DELETE', '/rest/user-manager/user/' . rawurlencode($id));
+        $this->request('DELETE', '/rest/user-manager/user/' . $this->recordId($id));
     }
 
     public function activeSessions(): array
@@ -267,7 +280,7 @@ final class MikrotikClient
         ];
         $profile = $this->findByName('/rest/user-manager/profile', $name);
         $result = $profile && !empty($profile['.id'])
-            ? $this->request('PATCH', '/rest/user-manager/profile/' . rawurlencode((string) $profile['.id']), $profilePayload)
+            ? $this->request('PATCH', '/rest/user-manager/profile/' . $this->recordId((string) $profile['.id']), $profilePayload)
             : $this->request('PUT', '/rest/user-manager/profile', $profilePayload);
 
         $parts = array_map('trim', explode('/', $rateLimit, 2));
@@ -283,7 +296,7 @@ final class MikrotikClient
         ];
         $limitation = $this->findByName('/rest/user-manager/limitation', $limitationName);
         if ($limitation && !empty($limitation['.id'])) {
-            $this->request('PATCH', '/rest/user-manager/limitation/' . rawurlencode((string) $limitation['.id']), $limitationPayload);
+            $this->request('PATCH', '/rest/user-manager/limitation/' . $this->recordId((string) $limitation['.id']), $limitationPayload);
         } else {
             $this->request('PUT', '/rest/user-manager/limitation', $limitationPayload);
         }

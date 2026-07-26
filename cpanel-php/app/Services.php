@@ -170,7 +170,7 @@ function toggle_ppp_user(int $id): string
     }
     $enable = $user['status'] !== 'active';
     $client = router_client(router_by_id((int) $user['router_id']));
-    $client->setSecret(user_manager_remote_id($client, $user), ['disabled' => $enable ? 'no' : 'yes']);
+    $client->setSecret(user_manager_remote_id($client, $user), ['disabled' => $enable ? 'false' : 'true']);
     $status = $enable ? 'active' : 'disabled';
     Database::execute('UPDATE ppp_users SET status = ?, last_synced_at = NOW() WHERE id = ?', [$status, $id]);
     log_activity($enable ? 'user_enable' : 'user_disable', 'ppp_user', $id);
@@ -185,7 +185,7 @@ function renew_ppp_user(int $id): array
     }
     $remoteFields = ['profile' => (string) $user['mikrotik_profile']];
     if ($user['status'] !== 'active') {
-        $remoteFields['disabled'] = 'no';
+        $remoteFields['disabled'] = 'false';
     }
     $client = router_client(router_by_id((int) $user['router_id']));
     $client->setSecret(user_manager_remote_id($client, $user), $remoteFields);
@@ -415,7 +415,7 @@ function expire_sweep(): int
     foreach ($users as $user) {
         try {
             $client = router_client(router_by_id((int) $user['router_id']));
-            $client->setSecret(user_manager_remote_id($client, $user), ['disabled' => 'yes']);
+            $client->setSecret(user_manager_remote_id($client, $user), ['disabled' => 'true']);
             Database::execute('UPDATE ppp_users SET status = "expired" WHERE id = ?', [$user['id']]);
             log_activity('user_auto_expire', 'ppp_user', (int) $user['id']);
             $count++;
