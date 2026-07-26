@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS ppp_users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS invoice_counters (
-    year_month CHAR(6) PRIMARY KEY,
+    `year_month` CHAR(6) PRIMARY KEY,
     last_value INT UNSIGNED NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -164,4 +164,3 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     attempted_at DATETIME NOT NULL,
     KEY idx_login_attempt (username, ip_address, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
