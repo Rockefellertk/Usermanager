@@ -183,6 +183,7 @@ switch ($route) {
                 if ($values[0] === '' || $values[1] === '' || $values[2] === '' || $values[3] < 0 || $values[5] < 1) {
                     throw new RuntimeException(tr('اطلاعات پلن معتبر نیست.', 'Plan details are invalid.'));
                 }
+                $syncedRouters = sync_plan_to_routers($values[1], $values[2]);
                 if ($id) {
                     Database::execute('UPDATE plans SET name=?, mikrotik_profile=?, rate_limit=?, price=?, currency=?, validity_days=?, data_cap_gb=?, is_active=? WHERE id=?', [...$values, $id]);
                     log_activity('plan_update', 'plan', $id, ['name' => $values[0]]);
@@ -191,7 +192,6 @@ switch ($route) {
                     $id = Database::id();
                     log_activity('plan_create', 'plan', $id, ['name' => $values[0]]);
                 }
-                $syncedRouters = sync_plan_to_routers($values[1], $values[2]);
                 log_activity('plan_router_sync', 'plan', $id, ['routers' => $syncedRouters, 'profile' => $values[1]]);
                 flash('success', tr('پلن ذخیره و پروفایل روی روتر اعمال شد.', 'Plan saved and router profile applied.'));
                 redirect_to('plans');
