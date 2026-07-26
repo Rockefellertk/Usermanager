@@ -458,6 +458,7 @@ switch ($route) {
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
         $directory = rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/'))), '/');
         $cronUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'your-domain.example') . $directory . '/cron.php?token=' . rawurlencode((string) config('app', 'cron_token'));
+        $cronPath = __DIR__ . DIRECTORY_SEPARATOR . 'cron.php';
         $diagnostics = [
             ['label' => 'PHP', 'value' => PHP_VERSION, 'ok' => PHP_VERSION_ID >= 80100],
             ['label' => 'PDO MySQL', 'value' => extension_loaded('pdo_mysql') ? tr('فعال','Enabled') : tr('غیرفعال','Disabled'), 'ok' => extension_loaded('pdo_mysql')],
@@ -465,7 +466,7 @@ switch ($route) {
             ['label' => 'OpenSSL', 'value' => extension_loaded('openssl') ? tr('فعال','Enabled') : tr('غیرفعال','Disabled'), 'ok' => extension_loaded('openssl')],
             ['label' => 'Timezone', 'value' => date_default_timezone_get(), 'ok' => true],
         ];
-        render('system',compact('cronUrl','diagnostics')+['pageTitle'=>tr('وضعیت سیستم','System status')]);
+        render('system',compact('cronUrl','cronPath','diagnostics')+['pageTitle'=>tr('وضعیت سیستم','System status')]);
         break;
 
     case 'maintenance-run':

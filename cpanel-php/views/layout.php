@@ -4,10 +4,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="color-scheme" content="light">
+    <meta name="color-scheme" content="light dark">
+    <script>(function(){var t=localStorage.getItem('um-theme');if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.dataset.theme=t;})();</script>
     <?php if($authUser&&Auth::canWrite()):?><meta name="csrf-token" content="<?= e(csrf_token()) ?>"><meta name="live-sync-url" content="<?= e(url('live-sync')) ?>"><?php endif;?>
     <title><?= e($pageTitle ?? '') ?> · <?= e(config('app', 'name', 'UserManager')) ?></title>
-    <link rel="stylesheet" href="public/style.css?v=1">
+    <link rel="stylesheet" href="public/style.css?v=2">
 </head>
 <body class="<?= $authUser ? 'app-shell' : 'guest-shell' ?>" data-route="<?= e($route) ?>">
 <?php if ($authUser): ?>
@@ -15,6 +16,7 @@
     <button class="menu-toggle" type="button" aria-label="Menu" data-menu-toggle>☰</button>
     <a class="brand" href="<?= e(url()) ?>"><span class="brand-mark">UM</span><span><?= e(config('app', 'name', 'UserManager')) ?></span></a>
     <div class="topbar-spacer"></div>
+    <button type="button" class="icon-button theme-toggle" data-theme-toggle aria-label="<?= e(tr('تغییر پوسته','Toggle theme')) ?>" title="<?= e(tr('حالت روشن/تیره','Light/Dark mode')) ?>"><span data-theme-icon>☾</span></button>
     <form method="post" action="<?= e(url('language')) ?>" class="language-form">
         <?= csrf_field() ?><input type="hidden" name="back" value="<?= e((string) ($_GET['r'] ?? 'dashboard')) ?>">
         <button type="submit" name="language" value="<?= $isFa ? 'en' : 'fa' ?>" class="button ghost small"><?= $isFa ? 'EN' : 'فا' ?></button>
@@ -48,6 +50,6 @@
     <?php foreach ($flashes as $flash): ?><div class="guest-alert alert <?= e($flash['type']) ?>"><?= e($flash['message']) ?></div><?php endforeach; ?>
     <?= $content ?>
 <?php endif; ?>
-<script src="public/app.js?v=5"></script>
+<script src="public/app.js?v=6"></script>
 </body>
 </html>

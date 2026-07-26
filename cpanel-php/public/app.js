@@ -15,6 +15,23 @@ document.querySelectorAll('[data-password-toggle]').forEach(function (button) {
     });
 });
 
+(function setupTheme() {
+    var button = document.querySelector('[data-theme-toggle]');
+    var icon = document.querySelector('[data-theme-icon]');
+    function render() {
+        var dark = document.documentElement.dataset.theme === 'dark';
+        if (icon) icon.textContent = dark ? '☀' : '☾';
+        if (button) button.setAttribute('aria-pressed', dark ? 'true' : 'false');
+    }
+    if (button) button.addEventListener('click', function () {
+        var next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = next;
+        localStorage.setItem('um-theme', next);
+        render();
+    });
+    render();
+})();
+
 var toggle = document.querySelector('[data-menu-toggle]');
 var sidebar = document.querySelector('[data-sidebar]');
 var backdrop = document.querySelector('[data-sidebar-backdrop]');
