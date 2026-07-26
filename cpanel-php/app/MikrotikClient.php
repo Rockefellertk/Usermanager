@@ -23,7 +23,9 @@ final class MikrotikClient
         if ($host === '' || str_contains($host, '/') || str_contains($host, '://')) {
             throw new InvalidArgumentException('Router host must be an IP address or hostname without scheme or path.');
         }
-        $this->baseUrl = ($useTls ? 'https' : 'http') . '://' . $host . ':' . $port;
+        $scheme = $useTls ? 'https' : 'http';
+        $isDefaultPort = ($useTls && $port === 443) || (!$useTls && $port === 80);
+        $this->baseUrl = $scheme . '://' . $host . ($isDefaultPort ? '' : ':' . $port);
     }
 
     private function request(string $method, string $path, ?array $payload = null, array $query = []): mixed
