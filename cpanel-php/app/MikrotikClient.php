@@ -99,17 +99,18 @@ final class MikrotikClient
 
     public function listSecrets(?string $name = null): array
     {
-        $result = $this->request('GET', '/rest/ppp/secret', null, $name ? ['name' => $name] : []);
+        $result = $this->request('GET', '/rest/user-manager/user', null, $name ? ['name' => $name] : []);
         return is_array($result) ? $result : [];
     }
 
     public function createSecret(string $name, string $password, string $profile, string $service, string $comment = ''): array
     {
-        $payload = ['name' => $name, 'password' => $password, 'profile' => $profile, 'service' => $service];
+        $payload = ['name' => $name, 'password' => $password];
         if ($comment !== '') {
             $payload['comment'] = $comment;
         }
-        $result = $this->request('PUT', '/rest/ppp/secret', $payload);
+        $result = $this->request('PUT', '/rest/user-manager/user', $payload);
+        $this->assignProfile($name, $profile);
         return is_array($result) ? $result : [];
     }
 
@@ -118,7 +119,22 @@ final class MikrotikClient
         if ($id === '') {
             throw new MikrotikException(tr('شناسه کاربر روی روتر ثبت نشده است؛ ابتدا همگام‌سازی کنید.', 'The router secret ID is missing; synchronize first.'));
         }
-        $result = $this->request('PATCH', '/rest/ppp/secret/' . rawurlencode($id), $fields);
+        if (isset($fields['profile'])) {
+            $users = $this->listSecrets();
+            foreach ($users as $user) {
+                if (($user['.id'] ?? '') === $id && !empty($user['name'])) {
+                    $this->assignProfile((string) $user['name'], (string) $fields['profile']);
+                    break;
+                }
+            }
+            unset($fields['profile']);
+        }
+        // Rate limits belong to User Manager limitations, not directly to users.
+        unset($fields['rate-limit']);
+        if (!$fields) {
+            return [];
+        }
+        $result = $this->request('PATCH', '/rest/user-manager/user/' . rawurlencode($id), $fields);
         return is_array($result) ? $result : [];
     }
 
@@ -127,39 +143,115 @@ final class MikrotikClient
         if ($id === '') {
             throw new MikrotikException(tr('شناسه کاربر روی روتر ثبت نشده است.', 'The router secret ID is missing.'));
         }
-        $this->request('DELETE', '/rest/ppp/secret/' . rawurlencode($id));
+        $this->request('DELETE', '/rest/user-manager/user/' . rawurlencode($id));
     }
 
     public function activeSessions(): array
     {
-        $result = $this->request('GET', '/rest/ppp/active');
-        return is_array($result) ? $result : [];
+        $result = $this->request('GET', '/rest/user-manager/session');
+        if (!is_array($result)) {
+            return [];
+        }
+        $sessions = [];
+        foreach ($result as $session) {
+            if (!in_array($session['active'] ?? false, [true, 'true', 'yes'], true)) {
+                continue;
+            }
+            $sessions[] = [
+                '.id' => $session['.id'] ?? ($session['acct-session-id'] ?? ''),
+                'name' => $session['user'] ?? '',
+                'address' => $session['user-address'] ?? '',
+                'uptime' => $session['uptime'] ?? '',
+                'bytes-in' => $session['download'] ?? 0,
+                'bytes-out' => $session['upload'] ?? 0,
+            ];
+        }
+        return $sessions;
     }
 
     public function listProfiles(): array
     {
-        $result = $this->request('GET', '/rest/ppp/profile');
+        $result = $this->request('GET', '/rest/user-manager/profile');
         return is_array($result) ? $result : [];
     }
 
-    public function saveProfile(string $name, string $rateLimit): array
+    public function listUserProfiles(): array
     {
-        $profiles = $this->request('GET', '/rest/ppp/profile', null, ['name' => $name]);
-        if (is_array($profiles)) {
-            foreach ($profiles as $profile) {
-                if (($profile['name'] ?? '') === $name && !empty($profile['.id'])) {
-                    $result = $this->request('PATCH', '/rest/ppp/profile/' . rawurlencode((string) $profile['.id']), [
-                        'rate-limit' => $rateLimit,
-                    ]);
-                    return is_array($result) ? $result : [];
+        $result = $this->request('GET', '/rest/user-manager/user-profile');
+        return is_array($result) ? $result : [];
+    }
+
+    private function findByName(string $path, string $name): ?array
+    {
+        $items = $this->request('GET', $path, null, ['name' => $name]);
+        if (!is_array($items)) {
+            return null;
+        }
+        foreach ($items as $item) {
+            if (($item['name'] ?? '') === $name) {
+                return $item;
+            }
+        }
+        return null;
+    }
+
+    private function assignProfile(string $username, string $profile): void
+    {
+        $assignments = $this->listUserProfiles();
+        foreach ($assignments as $assignment) {
+            if (($assignment['user'] ?? '') === $username && ($assignment['profile'] ?? '') === $profile
+                && ($assignment['state'] ?? '') !== 'used') {
+                return;
+            }
+        }
+        $this->request('PUT', '/rest/user-manager/user-profile', ['user' => $username, 'profile' => $profile]);
+    }
+
+    public function saveProfile(string $name, string $rateLimit, int $validityDays = 30, ?int $dataCapGb = null, float $price = 0): array
+    {
+        $profilePayload = [
+            'name' => $name,
+            'name-for-users' => $name,
+            'validity' => max(1, $validityDays) . 'd',
+            'starts-when' => 'assigned',
+            'price' => (string) max(0, $price),
+        ];
+        $profile = $this->findByName('/rest/user-manager/profile', $name);
+        $result = $profile && !empty($profile['.id'])
+            ? $this->request('PATCH', '/rest/user-manager/profile/' . rawurlencode((string) $profile['.id']), $profilePayload)
+            : $this->request('PUT', '/rest/user-manager/profile', $profilePayload);
+
+        $parts = array_map('trim', explode('/', $rateLimit, 2));
+        $limitationName = $name . '-limit';
+        $limitationPayload = [
+            'name' => $limitationName,
+            'rate-limit-rx' => $parts[0],
+            'rate-limit-tx' => $parts[1] ?? $parts[0],
+            'transfer-limit' => $dataCapGb ? (string) ($dataCapGb * 1073741824) : '0',
+        ];
+        $limitation = $this->findByName('/rest/user-manager/limitation', $limitationName);
+        if ($limitation && !empty($limitation['.id'])) {
+            $this->request('PATCH', '/rest/user-manager/limitation/' . rawurlencode((string) $limitation['.id']), $limitationPayload);
+        } else {
+            $this->request('PUT', '/rest/user-manager/limitation', $limitationPayload);
+        }
+
+        $links = $this->request('GET', '/rest/user-manager/profile-limitation');
+        $linked = false;
+        if (is_array($links)) {
+            foreach ($links as $link) {
+                if (($link['profile'] ?? '') === $name && ($link['limitation'] ?? '') === $limitationName) {
+                    $linked = true;
+                    break;
                 }
             }
         }
-
-        $result = $this->request('PUT', '/rest/ppp/profile', [
-            'name' => $name,
-            'rate-limit' => $rateLimit,
-        ]);
+        if (!$linked) {
+            $this->request('PUT', '/rest/user-manager/profile-limitation', [
+                'profile' => $name,
+                'limitation' => $limitationName,
+            ]);
+        }
         return is_array($result) ? $result : [];
     }
 }

@@ -24,7 +24,7 @@
 <aside class="sidebar" data-sidebar>
     <nav>
         <a class="nav-item <?= $route === 'dashboard' ? 'active' : '' ?>" href="<?= e(url('dashboard')) ?>"><span>⌂</span><?= e(tr('داشبورد', 'Dashboard')) ?></a>
-        <a class="nav-item <?= str_starts_with($route, 'user') ? 'active' : '' ?>" href="<?= e(url('users')) ?>"><span>◉</span><?= e(tr('کاربران PPP', 'PPP users')) ?></a>
+        <a class="nav-item <?= str_starts_with($route, 'user') ? 'active' : '' ?>" href="<?= e(url('users')) ?>"><span>◉</span><?= e(tr('کاربران User Manager', 'User Manager users')) ?></a>
         <a class="nav-item <?= str_starts_with($route, 'plan') ? 'active' : '' ?>" href="<?= e(url('plans')) ?>"><span>◇</span><?= e(tr('پلن‌ها', 'Plans')) ?></a>
         <a class="nav-item <?= str_starts_with($route, 'invoice') ? 'active' : '' ?>" href="<?= e(url('invoices')) ?>"><span>▤</span><?= e(tr('صورتحساب‌ها', 'Invoices')) ?></a>
         <a class="nav-item <?= $route === 'report' ? 'active' : '' ?>" href="<?= e(url('report')) ?>"><span>↗</span><?= e(tr('گزارش مالی', 'Financial report')) ?></a>

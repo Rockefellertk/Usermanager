@@ -48,7 +48,7 @@ function create_invoice(int $userId, ?int $planId, float $amount, ?int $adminId)
     return ['id' => $id, 'invoice_number' => $number];
 }
 
-function sync_plan_to_routers(string $profileName, string $rateLimit): array
+function sync_plan_to_routers(string $profileName, string $rateLimit, int $validityDays, ?int $dataCapGb, float $price): array
 {
     $routers = Database::fetchAll('SELECT * FROM routers WHERE is_active = 1 ORDER BY id');
     if (!$routers) {
@@ -56,7 +56,7 @@ function sync_plan_to_routers(string $profileName, string $rateLimit): array
     }
     $synced = [];
     foreach ($routers as $router) {
-        router_client($router)->saveProfile($profileName, $rateLimit);
+        router_client($router)->saveProfile($profileName, $rateLimit, $validityDays, $dataCapGb, $price);
         $synced[] = (string) $router['name'];
     }
     return $synced;
@@ -162,13 +162,15 @@ function toggle_ppp_user(int $id): string
 
 function renew_ppp_user(int $id): array
 {
-    $user = Database::fetch('SELECT u.*, p.price, p.validity_days FROM ppp_users u LEFT JOIN plans p ON p.id = u.plan_id WHERE u.id = ?', [$id]);
+    $user = Database::fetch('SELECT u.*, p.price, p.validity_days, p.mikrotik_profile FROM ppp_users u LEFT JOIN plans p ON p.id = u.plan_id WHERE u.id = ?', [$id]);
     if (!$user || !$user['plan_id']) {
         throw new RuntimeException(tr('برای تمدید، ابتدا یک پلن به کاربر اختصاص دهید.', 'Assign a plan before renewing the user.'));
     }
+    $remoteFields = ['profile' => (string) $user['mikrotik_profile']];
     if ($user['status'] !== 'active') {
-        router_client(router_by_id((int) $user['router_id']))->setSecret((string) $user['mikrotik_secret_id'], ['disabled' => 'no']);
+        $remoteFields['disabled'] = 'no';
     }
+    router_client(router_by_id((int) $user['router_id']))->setSecret((string) $user['mikrotik_secret_id'], $remoteFields);
     $pdo = Database::pdo();
     $pdo->beginTransaction();
     try {
@@ -203,14 +205,25 @@ function sync_router(int $routerId): array
 {
     $router = router_by_id($routerId);
     try {
-        $remote = router_client($router)->listSecrets();
+        $client = router_client($router);
+        $remote = $client->listSecrets();
+        $remoteProfiles = $client->listUserProfiles();
     } catch (Throwable $exception) {
         Database::execute('UPDATE routers SET last_status = "offline" WHERE id = ?', [$routerId]);
         throw $exception;
     }
+    $profilesByUser = [];
+    foreach ($remoteProfiles as $assignment) {
+        $username = (string) ($assignment['user'] ?? '');
+        $profile = (string) ($assignment['profile'] ?? '');
+        if ($username !== '' && $profile !== '' && ($assignment['state'] ?? '') !== 'used') {
+            $profilesByUser[$username] = $profile;
+        }
+    }
     $remoteByName = [];
     foreach ($remote as $item) {
         if (!empty($item['name'])) {
+            $item['profile'] = $profilesByUser[(string) $item['name']] ?? '';
             $remoteByName[(string) $item['name']] = $item;
         }
     }
@@ -227,7 +240,7 @@ function sync_router(int $routerId): array
     $created = $updated = $missing = 0;
     foreach ($remoteByName as $name => $item) {
         if (!isset($localByName[$name])) {
-            $service = in_array(($item['service'] ?? ''), ['pppoe', 'pptp', 'l2tp', 'sstp', 'any'], true) ? $item['service'] : 'pppoe';
+            $service = 'any';
             $profile = (string) ($item['profile'] ?? '');
             $matchedPlan = $plansByProfile[$profile] ?? null;
             $remoteDisabled = in_array($item['disabled'] ?? false, [true, 'true', 'yes'], true);

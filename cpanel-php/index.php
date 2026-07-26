@@ -183,7 +183,7 @@ switch ($route) {
                 if ($values[0] === '' || $values[1] === '' || $values[2] === '' || $values[3] < 0 || $values[5] < 1) {
                     throw new RuntimeException(tr('اطلاعات پلن معتبر نیست.', 'Plan details are invalid.'));
                 }
-                $syncedRouters = sync_plan_to_routers($values[1], $values[2]);
+                $syncedRouters = sync_plan_to_routers($values[1], $values[2], $values[5], $values[6], $values[3]);
                 if ($id) {
                     Database::execute('UPDATE plans SET name=?, mikrotik_profile=?, rate_limit=?, price=?, currency=?, validity_days=?, data_cap_gb=?, is_active=? WHERE id=?', [...$values, $id]);
                     log_activity('plan_update', 'plan', $id, ['name' => $values[0]]);
@@ -228,7 +228,7 @@ switch ($route) {
             $params
         );
         $routers = Database::fetchAll('SELECT id,name FROM routers ORDER BY name');
-        render('users', compact('users', 'routers', 'search', 'status', 'routerId', 'page', 'perPage', 'total') + ['pageTitle' => tr('کاربران PPP', 'PPP users')]);
+        render('users', compact('users', 'routers', 'search', 'status', 'routerId', 'page', 'perPage', 'total') + ['pageTitle' => tr('کاربران User Manager', 'User Manager users')]);
         break;
 
     case 'user-form':
