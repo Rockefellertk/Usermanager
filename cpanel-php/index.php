@@ -123,7 +123,9 @@ switch ($route) {
             $router = router_by_id($id);
             $online = router_client($router)->ping();
             Database::execute('UPDATE routers SET last_status = ? WHERE id = ?', [$online ? 'online' : 'offline', $id]);
-            flash($online ? 'success' : 'error', $online ? tr('اتصال با روتر برقرار شد.', 'Router connection succeeded.') : tr('روتر پاسخ نداد؛ مشخصات و فایروال را بررسی کنید.', 'Router did not respond. Check credentials and firewall.'));
+            $sync = sync_router($id);
+            $poll = poll_router($id);
+            flash('success', tr('اتصال برقرار و اطلاعات روتر همگام شد. کاربران جدید: ', 'Connected and synchronized. New users: ') . ($sync['created'] ?? 0) . tr('، نشست‌های آنلاین: ', ', online sessions: ') . ($poll['sessions'] ?? 0));
         } catch (Throwable $exception) {
             flash('error', $exception->getMessage());
         }
@@ -189,7 +191,9 @@ switch ($route) {
                     $id = Database::id();
                     log_activity('plan_create', 'plan', $id, ['name' => $values[0]]);
                 }
-                flash('success', tr('پلن ذخیره شد.', 'Plan saved.'));
+                $syncedRouters = sync_plan_to_routers($values[1], $values[2]);
+                log_activity('plan_router_sync', 'plan', $id, ['routers' => $syncedRouters, 'profile' => $values[1]]);
+                flash('success', tr('پلن ذخیره و پروفایل روی روتر اعمال شد.', 'Plan saved and router profile applied.'));
                 redirect_to('plans');
             } catch (Throwable $exception) {
                 flash('error', $exception->getMessage());
