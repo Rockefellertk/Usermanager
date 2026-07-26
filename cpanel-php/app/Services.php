@@ -48,6 +48,20 @@ function create_invoice(int $userId, ?int $planId, float $amount, ?int $adminId)
     return ['id' => $id, 'invoice_number' => $number];
 }
 
+function sync_plan_to_routers(string $profileName, string $rateLimit): array
+{
+    $routers = Database::fetchAll('SELECT * FROM routers WHERE is_active = 1 ORDER BY id');
+    if (!$routers) {
+        throw new RuntimeException(tr('ابتدا یک روتر فعال اضافه کنید.', 'Add an active router first.'));
+    }
+    $synced = [];
+    foreach ($routers as $router) {
+        router_client($router)->saveProfile($profileName, $rateLimit);
+        $synced[] = (string) $router['name'];
+    }
+    return $synced;
+}
+
 function create_ppp_user(array $input): array
 {
     $router = router_by_id((int) $input['router_id']);
@@ -201,6 +215,11 @@ function sync_router(int $routerId): array
         }
     }
     $locals = Database::fetchAll('SELECT * FROM ppp_users WHERE router_id = ?', [$routerId]);
+    $plans = Database::fetchAll('SELECT * FROM plans WHERE is_active = 1');
+    $plansByProfile = [];
+    foreach ($plans as $plan) {
+        $plansByProfile[(string) $plan['mikrotik_profile']] = $plan;
+    }
     $localByName = [];
     foreach ($locals as $local) {
         $localByName[$local['username']] = $local;
@@ -209,22 +228,30 @@ function sync_router(int $routerId): array
     foreach ($remoteByName as $name => $item) {
         if (!isset($localByName[$name])) {
             $service = in_array(($item['service'] ?? ''), ['pppoe', 'pptp', 'l2tp', 'sstp', 'any'], true) ? $item['service'] : 'pppoe';
+            $profile = (string) ($item['profile'] ?? '');
+            $matchedPlan = $plansByProfile[$profile] ?? null;
+            $remoteDisabled = in_array($item['disabled'] ?? false, [true, 'true', 'yes'], true);
+            $status = $matchedPlan ? ($remoteDisabled ? 'disabled' : 'active') : 'needs_plan_assignment';
             Database::execute(
-                'INSERT INTO ppp_users (router_id, mikrotik_secret_id, username, service, profile, status, comment, last_synced_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, "needs_plan_assignment", ?, NOW(), NOW(), NOW())',
-                [$routerId, $item['.id'] ?? '', $name, $service, $item['profile'] ?? '', $item['comment'] ?? '']
+                'INSERT INTO ppp_users (router_id, mikrotik_secret_id, username, service, plan_id, profile, rate_limit, status, comment, last_synced_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), NOW())',
+                [$routerId, $item['.id'] ?? '', $name, $service, $matchedPlan['id'] ?? null, $profile, $matchedPlan['rate_limit'] ?? '', $status, $item['comment'] ?? '']
             );
             $created++;
             continue;
         }
         $local = $localByName[$name];
         $remoteDisabled = in_array($item['disabled'] ?? false, [true, 'true', 'yes'], true);
+        $profile = (string) ($item['profile'] ?? $local['profile']);
+        $matchedPlan = $plansByProfile[$profile] ?? null;
         $status = $local['status'];
-        if (in_array($status, ['active', 'disabled'], true)) {
+        if ($matchedPlan || in_array($status, ['active', 'disabled'], true)) {
             $status = $remoteDisabled ? 'disabled' : 'active';
         }
-        if ($status !== $local['status'] || ($item['profile'] ?? '') !== $local['profile'] || ($item['.id'] ?? '') !== $local['mikrotik_secret_id']) {
-            Database::execute('UPDATE ppp_users SET status = ?, profile = ?, mikrotik_secret_id = ?, last_synced_at = NOW() WHERE id = ?', [$status, $item['profile'] ?? $local['profile'], $item['.id'] ?? $local['mikrotik_secret_id'], $local['id']]);
+        if ($matchedPlan || $status !== $local['status'] || $profile !== $local['profile'] || ($item['.id'] ?? '') !== $local['mikrotik_secret_id']) {
+            Database::execute('UPDATE ppp_users SET status = ?, plan_id = COALESCE(?, plan_id), profile = ?, rate_limit = CASE WHEN ? IS NULL THEN rate_limit ELSE ? END, mikrotik_secret_id = ?, last_synced_at = NOW() WHERE id = ?', [$status, $matchedPlan['id'] ?? null, $profile, $matchedPlan['id'] ?? null, $matchedPlan['rate_limit'] ?? '', $item['.id'] ?? $local['mikrotik_secret_id'], $local['id']]);
             $updated++;
+        } else {
+            Database::execute('UPDATE ppp_users SET last_synced_at = NOW() WHERE id = ?', [$local['id']]);
         }
     }
     $missingNames = array_diff(array_keys($localByName), array_keys($remoteByName));

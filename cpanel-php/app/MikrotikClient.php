@@ -141,4 +141,25 @@ final class MikrotikClient
         $result = $this->request('GET', '/rest/ppp/profile');
         return is_array($result) ? $result : [];
     }
+
+    public function saveProfile(string $name, string $rateLimit): array
+    {
+        $profiles = $this->request('GET', '/rest/ppp/profile', null, ['name' => $name]);
+        if (is_array($profiles)) {
+            foreach ($profiles as $profile) {
+                if (($profile['name'] ?? '') === $name && !empty($profile['.id'])) {
+                    $result = $this->request('PATCH', '/rest/ppp/profile/' . rawurlencode((string) $profile['.id']), [
+                        'rate-limit' => $rateLimit,
+                    ]);
+                    return is_array($result) ? $result : [];
+                }
+            }
+        }
+
+        $result = $this->request('PUT', '/rest/ppp/profile', [
+            'name' => $name,
+            'rate-limit' => $rateLimit,
+        ]);
+        return is_array($result) ? $result : [];
+    }
 }
