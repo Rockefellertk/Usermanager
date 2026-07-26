@@ -48,4 +48,7 @@
 <script src="public/app.js?v=1"></script>
 </body>
 </html>
-
+@@
+-<main class="main-content">\+    <?php foreach ($flashes as $flash): ?><div class="alert <?= e($flash['type']) ?>"><span><?= $flash['type'] === 'success' ? '✓' : ($flash['type'] === 'warning' ? '!' : '×') ?></span><div><?= e($flash['message']) ?></div><button type="button" data-dismiss>×</button></div><?php endforeach; ?>
++<main class="main-content">
++    <?php foreach ($flashes as $flash): ?><div class="alert <?= e($flash['type']) ?>"><span><?= $flash['type'] === 'success' ? '✓' : ($flash['type'] === 'warning' ? '!' : '×') ?></span><div><?= e($flash['message']) ?></div><button type="button" data-dismiss>×</button></div><?php endforeach; ?>
