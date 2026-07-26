@@ -13,12 +13,13 @@ function router_by_id(int $id): array
 
 function router_client(array $router): MikrotikClient
 {
+    $useApiKey = (bool) $router['use_api_key'];
     return new MikrotikClient(
         (string) $router['host'],
         (int) $router['port'],
         (string) $router['username'],
-        decrypt_secret($router['password_encrypted'] ?? ''),
-        decrypt_secret($router['api_key_encrypted'] ?? ''),
+        $useApiKey ? '' : decrypt_secret($router['password_encrypted'] ?? ''),
+        $useApiKey ? decrypt_secret($router['api_key_encrypted'] ?? '') : '',
         (bool) $router['use_tls'],
         (bool) $router['verify_tls'],
     );

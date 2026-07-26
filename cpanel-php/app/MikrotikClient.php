@@ -89,12 +89,10 @@ final class MikrotikClient
 
     public function ping(): bool
     {
-        try {
-            $this->request('GET', '/rest/system/resource');
-            return true;
-        } catch (MikrotikException) {
-            return false;
-        }
+        // Let the original exception reach the UI. A generic false result hides
+        // whether the problem is routing, firewall, TLS, credentials or policy.
+        $this->request('GET', '/rest/system/resource');
+        return true;
     }
 
     public function listSecrets(?string $name = null): array
@@ -142,4 +140,3 @@ final class MikrotikClient
         return is_array($result) ? $result : [];
     }
 }
-
