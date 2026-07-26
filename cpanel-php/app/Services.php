@@ -48,6 +48,21 @@ function create_invoice(int $userId, ?int $planId, float $amount, ?int $adminId)
     return ['id' => $id, 'invoice_number' => $number];
 }
 
+function user_manager_remote_id(MikrotikClient $client, array $user): string
+{
+    $currentId = (string) ($user['mikrotik_secret_id'] ?? '');
+    foreach ($client->listSecrets((string) $user['username']) as $remote) {
+        if (($remote['name'] ?? '') === $user['username'] && !empty($remote['.id'])) {
+            $remoteId = (string) $remote['.id'];
+            if ($remoteId !== $currentId && !empty($user['id'])) {
+                Database::execute('UPDATE ppp_users SET mikrotik_secret_id = ? WHERE id = ?', [$remoteId, $user['id']]);
+            }
+            return $remoteId;
+        }
+    }
+    throw new RuntimeException(tr('کاربر در User Manager روتر پیدا نشد؛ ابتدا همگام‌سازی کنید.', 'User was not found in RouterOS User Manager; synchronize first.'));
+}
+
 function sync_plan_to_routers(string $profileName, string $rateLimit, int $validityDays, ?int $dataCapGb, float $price): array
 {
     $routers = Database::fetchAll('SELECT * FROM routers WHERE is_active = 1 ORDER BY id');
@@ -136,7 +151,8 @@ function update_ppp_user(int $id, array $input): void
         $remoteFields['rate-limit'] = $rateLimit;
     }
     if ($remoteFields) {
-        router_client($router)->setSecret((string) $user['mikrotik_secret_id'], $remoteFields);
+        $client = router_client($router);
+        $client->setSecret(user_manager_remote_id($client, $user), $remoteFields);
     }
     $passwordEncrypted = ($input['password'] ?? '') !== '' ? encrypt_secret($input['password']) : $user['password_encrypted'];
     Database::execute(
@@ -153,7 +169,8 @@ function toggle_ppp_user(int $id): string
         throw new RuntimeException(tr('کاربر پیدا نشد.', 'User not found.'));
     }
     $enable = $user['status'] !== 'active';
-    router_client(router_by_id((int) $user['router_id']))->setSecret((string) $user['mikrotik_secret_id'], ['disabled' => $enable ? 'no' : 'yes']);
+    $client = router_client(router_by_id((int) $user['router_id']));
+    $client->setSecret(user_manager_remote_id($client, $user), ['disabled' => $enable ? 'no' : 'yes']);
     $status = $enable ? 'active' : 'disabled';
     Database::execute('UPDATE ppp_users SET status = ?, last_synced_at = NOW() WHERE id = ?', [$status, $id]);
     log_activity($enable ? 'user_enable' : 'user_disable', 'ppp_user', $id);
@@ -170,7 +187,8 @@ function renew_ppp_user(int $id): array
     if ($user['status'] !== 'active') {
         $remoteFields['disabled'] = 'no';
     }
-    router_client(router_by_id((int) $user['router_id']))->setSecret((string) $user['mikrotik_secret_id'], $remoteFields);
+    $client = router_client(router_by_id((int) $user['router_id']));
+    $client->setSecret(user_manager_remote_id($client, $user), $remoteFields);
     $pdo = Database::pdo();
     $pdo->beginTransaction();
     try {
@@ -196,9 +214,63 @@ function delete_ppp_user(int $id): void
     if (!$user) {
         return;
     }
-    router_client(router_by_id((int) $user['router_id']))->removeSecret((string) $user['mikrotik_secret_id']);
+    $client = router_client(router_by_id((int) $user['router_id']));
+    $client->removeSecret(user_manager_remote_id($client, $user));
     Database::execute('DELETE FROM ppp_users WHERE id = ?', [$id]);
     log_activity('user_delete', 'ppp_user', $id, ['username' => $user['username']]);
+}
+
+function routeros_validity_days(string $validity): int
+{
+    if ($validity === '' || $validity === 'unlimited') {
+        return 36500;
+    }
+    $seconds = parse_uptime($validity);
+    return max(1, (int) ceil($seconds / 86400));
+}
+
+function import_user_manager_catalog(MikrotikClient $client): int
+{
+    $profiles = $client->listProfiles();
+    $limitations = [];
+    foreach ($client->listLimitations() as $limitation) {
+        if (!empty($limitation['name'])) {
+            $limitations[(string) $limitation['name']] = $limitation;
+        }
+    }
+    $limitationByProfile = [];
+    foreach ($client->listProfileLimitations() as $link) {
+        $profileName = (string) ($link['profile'] ?? '');
+        $limitationName = (string) ($link['limitation'] ?? '');
+        if ($profileName !== '' && isset($limitations[$limitationName])) {
+            $limitationByProfile[$profileName] = $limitations[$limitationName];
+        }
+    }
+
+    $count = 0;
+    foreach ($profiles as $profile) {
+        $profileName = (string) ($profile['name'] ?? '');
+        if ($profileName === '') {
+            continue;
+        }
+        $limitation = $limitationByProfile[$profileName] ?? [];
+        $rx = (string) ($limitation['rate-limit-rx'] ?? '');
+        $tx = (string) ($limitation['rate-limit-tx'] ?? '');
+        $rateLimit = $rx !== '' ? $rx . '/' . ($tx !== '' ? $tx : $rx) : '0/0';
+        $transferBytes = (int) ($limitation['transfer-limit'] ?? 0);
+        $dataCapGb = $transferBytes > 0 ? max(1, (int) ceil($transferBytes / 1073741824)) : null;
+        $nameForUsers = trim((string) ($profile['name-for-users'] ?? '')) ?: $profileName;
+        $validityDays = routeros_validity_days((string) ($profile['validity'] ?? 'unlimited'));
+        $price = (float) ($profile['price'] ?? 0);
+        $existing = Database::fetch('SELECT id FROM plans WHERE mikrotik_profile = ? ORDER BY id LIMIT 1', [$profileName]);
+        if ($existing) {
+            Database::execute('UPDATE plans SET name=?, rate_limit=?, price=?, validity_days=?, data_cap_gb=?, is_active=1 WHERE id=?', [$nameForUsers, $rateLimit, $price, $validityDays, $dataCapGb, $existing['id']]);
+        } else {
+            Database::execute('INSERT INTO plans (name,mikrotik_profile,rate_limit,price,currency,validity_days,data_cap_gb,is_active,created_at) VALUES (?,?,?,? ,"IRR",?,?,1,NOW())', [$nameForUsers, $profileName, $rateLimit, $price, $validityDays, $dataCapGb]);
+        }
+        $count++;
+    }
+    return $count;
 }
 
 function sync_router(int $routerId): array
@@ -208,6 +280,7 @@ function sync_router(int $routerId): array
         $client = router_client($router);
         $remote = $client->listSecrets();
         $remoteProfiles = $client->listUserProfiles();
+        $catalogCount = import_user_manager_catalog($client);
     } catch (Throwable $exception) {
         Database::execute('UPDATE routers SET last_status = "offline" WHERE id = ?', [$routerId]);
         throw $exception;
@@ -271,15 +344,15 @@ function sync_router(int $routerId): array
     if ($locals && count($missingNames) / count($locals) > 0.30) {
         log_activity('sync_paused_suspected_restore', 'router', $routerId, ['missing' => count($missingNames), 'total' => count($locals)]);
         Database::execute('UPDATE routers SET last_status = "online", last_sync_at = NOW() WHERE id = ?', [$routerId]);
-        return ['created' => $created, 'updated' => $updated, 'paused' => true, 'missing' => count($missingNames)];
+        return ['created' => $created, 'updated' => $updated, 'paused' => true, 'missing' => count($missingNames), 'catalogCount' => $catalogCount];
     }
     foreach ($missingNames as $name) {
         Database::execute('UPDATE ppp_users SET status = "missing_on_device" WHERE router_id = ? AND username = ?', [$routerId, $name]);
         $missing++;
     }
     Database::execute('UPDATE routers SET last_status = "online", last_sync_at = NOW() WHERE id = ?', [$routerId]);
-    log_activity('router_sync', 'router', $routerId, compact('created', 'updated', 'missing'));
-    return compact('created', 'updated', 'missing');
+    log_activity('router_sync', 'router', $routerId, compact('created', 'updated', 'missing', 'catalogCount'));
+    return compact('created', 'updated', 'missing', 'catalogCount');
 }
 
 function parse_uptime(string $value): int
@@ -341,7 +414,8 @@ function expire_sweep(): int
     $count = 0;
     foreach ($users as $user) {
         try {
-            router_client(router_by_id((int) $user['router_id']))->setSecret((string) $user['mikrotik_secret_id'], ['disabled' => 'yes']);
+            $client = router_client(router_by_id((int) $user['router_id']));
+            $client->setSecret(user_manager_remote_id($client, $user), ['disabled' => 'yes']);
             Database::execute('UPDATE ppp_users SET status = "expired" WHERE id = ?', [$user['id']]);
             log_activity('user_auto_expire', 'ppp_user', (int) $user['id']);
             $count++;

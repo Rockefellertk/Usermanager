@@ -145,6 +145,18 @@ switch ($route) {
         }
         redirect_to('routers');
 
+    case 'router-data':
+        $id = max(0, (int) ($_GET['id'] ?? 0));
+        try {
+            $router = router_by_id($id);
+            $snapshot = router_client($router)->userManagerSnapshot();
+            render('router_data', compact('router', 'snapshot') + ['pageTitle' => tr('اطلاعات User Manager', 'User Manager data')]);
+        } catch (Throwable $exception) {
+            flash('error', $exception->getMessage());
+            redirect_to('routers');
+        }
+        break;
+
     case 'router-delete':
         require_superadmin();
         csrf_check();

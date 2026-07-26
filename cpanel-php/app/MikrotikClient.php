@@ -143,6 +143,25 @@ final class MikrotikClient
         if ($id === '') {
             throw new MikrotikException(tr('شناسه کاربر روی روتر ثبت نشده است.', 'The router secret ID is missing.'));
         }
+        $username = '';
+        foreach ($this->listSecrets() as $user) {
+            if (($user['.id'] ?? '') === $id) {
+                $username = (string) ($user['name'] ?? '');
+                break;
+            }
+        }
+        if ($username !== '') {
+            foreach ($this->listUserProfiles() as $assignment) {
+                if (($assignment['user'] ?? '') === $username && !empty($assignment['.id'])) {
+                    try {
+                        $this->request('DELETE', '/rest/user-manager/user-profile/' . rawurlencode((string) $assignment['.id']));
+                    } catch (MikrotikException) {
+                        // Used profile history can be immutable. User deletion below
+                        // will either cascade it or return the actual RouterOS error.
+                    }
+                }
+            }
+        }
         $this->request('DELETE', '/rest/user-manager/user/' . rawurlencode($id));
     }
 
@@ -179,6 +198,36 @@ final class MikrotikClient
     {
         $result = $this->request('GET', '/rest/user-manager/user-profile');
         return is_array($result) ? $result : [];
+    }
+
+    public function listLimitations(): array
+    {
+        $result = $this->request('GET', '/rest/user-manager/limitation');
+        return is_array($result) ? $result : [];
+    }
+
+    public function listProfileLimitations(): array
+    {
+        $result = $this->request('GET', '/rest/user-manager/profile-limitation');
+        return is_array($result) ? $result : [];
+    }
+
+    public function listSessions(): array
+    {
+        $result = $this->request('GET', '/rest/user-manager/session');
+        return is_array($result) ? $result : [];
+    }
+
+    public function userManagerSnapshot(): array
+    {
+        return [
+            'profiles' => $this->listProfiles(),
+            'limitations' => $this->listLimitations(),
+            'profile_limitations' => $this->listProfileLimitations(),
+            'users' => $this->listSecrets(),
+            'user_profiles' => $this->listUserProfiles(),
+            'sessions' => $this->listSessions(),
+        ];
     }
 
     private function findByName(string $path, string $name): ?array
@@ -222,6 +271,9 @@ final class MikrotikClient
             : $this->request('PUT', '/rest/user-manager/profile', $profilePayload);
 
         $parts = array_map('trim', explode('/', $rateLimit, 2));
+        if (strtolower($parts[0]) === 'unlimited') {
+            $parts = ['0', '0'];
+        }
         $limitationName = $name . '-limit';
         $limitationPayload = [
             'name' => $limitationName,
