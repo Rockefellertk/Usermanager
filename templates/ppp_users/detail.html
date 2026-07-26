@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% block title %}{{ local_user.username }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4>{{ local_user.username }}
+    {% if session %}<span class="badge text-bg-success">{% trans "Online" %}</span>{% else %}<span class="badge text-bg-secondary">{% trans "Offline" %}</span>{% endif %}
+  </h4>
+  <div>
+    <a href="{% url 'ppp_users:edit' local_user.pk %}" class="btn btn-outline-primary btn-sm">{% trans "Edit" %}</a>
+    <form method="post" action="{% url 'ppp_users:toggle_status' local_user.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button class="btn btn-outline-warning btn-sm">{% if local_user.status == "active" %}{% trans "Disable" %}{% else %}{% trans "Enable" %}{% endif %}</button>
+    </form>
+    <form method="post" action="{% url 'ppp_users:renew' local_user.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button class="btn btn-outline-success btn-sm">{% trans "Renew" %}</button>
+    </form>
+    <a href="{% url 'ppp_users:delete' local_user.pk %}" class="btn btn-outline-danger btn-sm">{% trans "Delete" %}</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">{% trans "Details" %}</div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">{% trans "Router" %}: {{ local_user.mikrotik.name }}</li>
+        <li class="list-group-item">{% trans "Service" %}: {{ local_user.get_service_display }}</li>
+        <li class="list-group-item">{% trans "Status" %}: {{ local_user.get_status_display }}</li>
+        <li class="list-group-item">{% trans "Plan" %}: {{ local_user.plan|default:"—" }}</li>
+        <li class="list-group-item">{% trans "Rate Limit" %}: {{ local_user.rate_limit|default:"—" }}</li>
+        <li class="list-group-item">{% trans "Expiration" %}: {{ local_user.expiration_date|default:"—" }}</li>
+        <li class="list-group-item">{% trans "Full Name" %}: {{ local_user.full_name|default:"—" }}</li>
+        <li class="list-group-item">{% trans "Phone" %}: {{ local_user.phone|default:"—" }}</li>
+        {% if session %}
+        <li class="list-group-item">{% trans "Uptime" %}: {{ session.uptime }}</li>
+        <li class="list-group-item">{% trans "Address" %}: {{ session.address }}</li>
+        {% endif %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">{% trans "Traffic (last 30 days)" %}</div>
+      <div class="card-body"><canvas id="trafficChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header">{% trans "Invoices" %}</div>
+  <table class="table mb-0">
+    <thead><tr><th>#</th><th>{% trans "Amount" %}</th><th>{% trans "Status" %}</th><th>{% trans "Due" %}</th></tr></thead>
+    <tbody>
+    {% for inv in invoices %}
+      <tr>
+        <td><a href="{% url 'billing:invoice_detail' inv.pk %}">{{ inv.invoice_number }}</a></td>
+        <td>{{ inv.total }}</td>
+        <td>{{ inv.get_status_display }}</td>
+        <td>{{ inv.due_date }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" class="text-center text-muted">{% trans "No invoices yet." %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+fetch("{% url 'traffic:chart_data' local_user.id %}?days=30")
+  .then(r => r.json())
+  .then(d => new Chart(document.getElementById('trafficChart'), {
+    type: 'line',
+    data: { labels: d.labels, datasets: [
+      { label: "{% trans 'Download (GB)' %}", data: d.download_gb, borderColor: '#0d6efd' },
+      { label: "{% trans 'Upload (GB)' %}", data: d.upload_gb, borderColor: '#198754' },
+    ]},
+  }));
+</script>
+{% endblock %}

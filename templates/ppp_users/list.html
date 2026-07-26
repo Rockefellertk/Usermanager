@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% block title %}{% trans "PPP Users" %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4>{% trans "PPP Users" %}</h4>
+  <a href="{% url 'ppp_users:add' %}" class="btn btn-primary">{% trans "Add User" %}</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto"><input type="text" name="q" value="{{ search }}" class="form-control" placeholder="{% trans 'Search username...' %}"></div>
+  <div class="col-auto">
+    <select name="status" class="form-select">
+      <option value="">{% trans "All statuses" %}</option>
+      {% for value, label in status_choices %}
+        <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto"><button class="btn btn-outline-secondary">{% trans "Filter" %}</button></div>
+</form>
+
+<table class="table table-striped align-middle">
+  <thead>
+    <tr>
+      <th>{% trans "Username" %}</th>
+      <th>{% trans "Status" %}</th>
+      <th>{% trans "Online" %}</th>
+      <th>{% trans "Plan" %}</th>
+      <th>{% trans "Rate Limit" %}</th>
+      <th>{% trans "Expiration" %}</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for u in page_obj %}
+    <tr>
+      <td><a href="{% url 'ppp_users:detail' u.pk %}">{{ u.username }}</a></td>
+      <td><span class="badge {% if u.status == 'active' %}text-bg-success{% elif u.status == 'expired' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ u.get_status_display }}</span></td>
+      <td>{% if u.username in online_names %}<span class="badge text-bg-success">{% trans "Online" %}</span>{% else %}<span class="badge text-bg-secondary">{% trans "Offline" %}</span>{% endif %}</td>
+      <td>{{ u.plan|default:"—" }}</td>
+      <td>{{ u.rate_limit|default:"—" }}</td>
+      <td>{{ u.expiration_date|default:"—" }}</td>
+      <td><a href="{% url 'ppp_users:detail' u.pk %}" class="btn btn-sm btn-outline-primary">{% trans "View" %}</a></td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="7" class="text-center text-muted">{% trans "No users found." %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if page_obj.has_other_pages %}
+<nav>
+  <ul class="pagination">
+    {% for i in page_obj.paginator.page_range %}
+      <li class="page-item {% if page_obj.number == i %}active{% endif %}">
+        <a class="page-link" href="?page={{ i }}&q={{ search }}&status={{ status }}">{{ i }}</a>
+      </li>
+    {% endfor %}
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}

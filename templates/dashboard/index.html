@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% block title %}{% trans "Dashboard" %}{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-md-3">
+    <div class="card text-bg-primary shadow-sm">
+      <div class="card-body">
+        <div class="fs-2">{{ total_users }}</div>
+        <div>{% trans "Total PPP Users" %}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-bg-success shadow-sm">
+      <div class="card-body">
+        <div class="fs-2">{{ online_count }}</div>
+        <div>{% trans "Online Now" %}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-bg-info shadow-sm">
+      <div class="card-body">
+        <div class="fs-4">{{ traffic_in_gb }} / {{ traffic_out_gb }} GB</div>
+        <div>{% trans "Traffic Today (in/out)" %}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-bg-warning shadow-sm">
+      <div class="card-body">
+        <div class="fs-4">{{ revenue_this_month }}</div>
+        <div>{% trans "Revenue This Month" %}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="fs-2 text-danger">{{ expired_users }}</div>
+        <div>{% trans "Expired Users" %}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="fs-2 text-danger">{{ overdue_count }}</div>
+        <div>{% trans "Overdue Invoices" %}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="fs-2">{{ unpaid_total }}</div>
+        <div>{% trans "Total Unpaid Amount" %}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mt-4 shadow-sm">
+  <div class="card-header">{% trans "Routers" %}</div>
+  <table class="table mb-0">
+    <thead><tr>
+      <th>{% trans "Name" %}</th><th>{% trans "Host" %}</th><th>{% trans "Status" %}</th><th>{% trans "Last Sync" %}</th>
+    </tr></thead>
+    <tbody>
+    {% for r in routers %}
+      <tr>
+        <td>{{ r.name }}</td>
+        <td>{{ r.host }}:{{ r.port }}</td>
+        <td><span class="badge {% if r.last_status == 'online' %}text-bg-success{% elif r.last_status == 'offline' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ r.get_last_status_display }}</span></td>
+        <td>{{ r.last_sync_at|default:"—" }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" class="text-center text-muted">{% trans "No routers configured yet — add one in the admin panel." %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

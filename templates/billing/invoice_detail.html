@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% block title %}{{ invoice.invoice_number }}{% endblock %}
+{% block content %}
+<h4>{{ invoice.invoice_number }} <span class="badge text-bg-secondary">{{ invoice.get_status_display }}</span></h4>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">{% trans "Details" %}</div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">{% trans "User" %}: <a href="{% url 'ppp_users:detail' invoice.local_user.pk %}">{{ invoice.local_user.username }}</a></li>
+        <li class="list-group-item">{% trans "Plan" %}: {{ invoice.plan|default:"—" }}</li>
+        <li class="list-group-item">{% trans "Amount" %}: {{ invoice.amount }}</li>
+        <li class="list-group-item">{% trans "Discount" %}: {{ invoice.discount }}</li>
+        <li class="list-group-item">{% trans "Tax" %}: {{ invoice.tax }}</li>
+        <li class="list-group-item"><strong>{% trans "Total" %}: {{ invoice.total }}</strong></li>
+        <li class="list-group-item">{% trans "Paid" %}: {{ invoice.amount_paid }}</li>
+        <li class="list-group-item">{% trans "Balance Due" %}: {{ invoice.balance_due }}</li>
+        <li class="list-group-item">{% trans "Issue Date" %}: {{ invoice.issue_date }}</li>
+        <li class="list-group-item">{% trans "Due Date" %}: {{ invoice.due_date }}</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">{% trans "Record Payment" %}</div>
+      <div class="card-body">
+        {% if invoice.balance_due > 0 %}
+        <form method="post">
+          {% csrf_token %}
+          {{ form.as_p }}
+          <button type="submit" class="btn btn-primary">{% trans "Save Payment" %}</button>
+        </form>
+        {% else %}
+        <p class="text-success">{% trans "Fully paid." %}</p>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card mt-3">
+      <div class="card-header">{% trans "Payment History" %}</div>
+      <table class="table mb-0">
+        <thead><tr><th>{% trans "Amount" %}</th><th>{% trans "Method" %}</th><th>{% trans "Received" %}</th></tr></thead>
+        <tbody>
+        {% for p in payments %}
+          <tr><td>{{ p.amount }}</td><td>{{ p.get_method_display }}</td><td>{{ p.received_at }}</td></tr>
+        {% empty %}
+          <tr><td colspan="3" class="text-center text-muted">{% trans "No payments yet." %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
