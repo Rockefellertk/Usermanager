@@ -48,6 +48,6 @@
     <?php foreach ($flashes as $flash): ?><div class="guest-alert alert <?= e($flash['type']) ?>"><?= e($flash['message']) ?></div><?php endforeach; ?>
     <?= $content ?>
 <?php endif; ?>
-<script src="public/app.js?v=3"></script>
+<script src="public/app.js?v=5"></script>
 </body>
 </html>

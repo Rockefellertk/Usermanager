@@ -146,6 +146,43 @@ CREATE TABLE IF NOT EXISTS active_sessions (
     CONSTRAINT fk_active_router FOREIGN KEY (router_id) REFERENCES routers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS router_interfaces (
+    router_id BIGINT UNSIGNED NOT NULL,
+    interface_name VARCHAR(255) NOT NULL,
+    interface_type VARCHAR(50) NOT NULL DEFAULT '',
+    is_running TINYINT(1) NOT NULL DEFAULT 0,
+    rx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    tx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    last_seen_at DATETIME NOT NULL,
+    PRIMARY KEY (router_id, interface_name),
+    KEY idx_interface_seen (last_seen_at),
+    CONSTRAINT fk_interface_router FOREIGN KEY (router_id) REFERENCES routers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS interface_traffic_daily (
+    router_id BIGINT UNSIGNED NOT NULL,
+    interface_name VARCHAR(255) NOT NULL,
+    interface_type VARCHAR(50) NOT NULL DEFAULT '',
+    log_date DATE NOT NULL,
+    rx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    tx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (router_id, interface_name, log_date),
+    KEY idx_interface_traffic_date (log_date),
+    CONSTRAINT fk_interface_traffic_router FOREIGN KEY (router_id) REFERENCES routers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS interface_traffic_hourly (
+    router_id BIGINT UNSIGNED NOT NULL,
+    interface_name VARCHAR(255) NOT NULL,
+    interface_type VARCHAR(50) NOT NULL DEFAULT '',
+    hour_start DATETIME NOT NULL,
+    rx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    tx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (router_id, interface_name, hour_start),
+    KEY idx_interface_hour (hour_start),
+    CONSTRAINT fk_interface_hour_router FOREIGN KEY (router_id) REFERENCES routers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS activity_logs (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     admin_id BIGINT UNSIGNED NULL,

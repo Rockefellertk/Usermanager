@@ -243,6 +243,14 @@ final class MikrotikClient
         ];
     }
 
+    public function listInterfaces(): array
+    {
+        $result = $this->request('POST', '/rest/interface/print', [
+            '.proplist' => '.id,name,type,running,disabled,rx-byte,tx-byte,rx-packet,tx-packet',
+        ]);
+        return is_array($result) ? $result : [];
+    }
+
     private function findByName(string $path, string $name): ?array
     {
         $items = $this->request('GET', $path, null, ['name' => $name]);

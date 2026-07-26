@@ -77,5 +77,5 @@ document.querySelectorAll('[data-auto-filter]').forEach(function (form) {
             busy = false;
         }
     }
-    setInterval(refresh, 20000);
+    setInterval(refresh, 60000);
 })();

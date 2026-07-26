@@ -48,9 +48,9 @@ switch ($route) {
         $result = [];
         foreach (Database::fetchAll('SELECT id,last_sync_at FROM routers WHERE is_active=1') as $liveRouter) {
             try {
-                $item = ['poll' => poll_router((int) $liveRouter['id'])];
+                $item = ['poll' => poll_router((int) $liveRouter['id']), 'interfaces' => poll_router_interfaces((int) $liveRouter['id'])];
                 $lastSync = $liveRouter['last_sync_at'] ? strtotime((string) $liveRouter['last_sync_at']) : 0;
-                if ($lastSync < time() - 60) {
+                if ($lastSync < time() - 300) {
                     $item['sync'] = sync_router((int) $liveRouter['id']);
                 }
                 $result[(int) $liveRouter['id']] = $item;
@@ -63,20 +63,34 @@ switch ($route) {
 
     case 'dashboard':
         overdue_sweep();
+        $trafficSource = trim((string) ($_GET['traffic_source'] ?? 'total'));
+        $trafficInterfaces = Database::fetchAll('SELECT i.*,r.name AS router_name FROM router_interfaces i JOIN routers r ON r.id=i.router_id WHERE r.is_active=1 AND LOWER(i.interface_name)="internet" AND LOWER(i.interface_type) LIKE "%pppoe%" ORDER BY r.name');
+        $trafficWhere = 'LOWER(interface_name)="internet" AND LOWER(interface_type) LIKE "%pppoe%"';
+        $trafficParams = [];
+        if ($trafficSource !== 'total' && ctype_digit($trafficSource)) {
+            $trafficWhere = 'router_id=? AND LOWER(interface_name)="internet" AND LOWER(interface_type) LIKE "%pppoe%"';
+            $trafficParams = [(int) $trafficSource];
+        }
+        $todayInterfaceTraffic = Database::fetch('SELECT COALESCE(SUM(rx_bytes),0) rx,COALESCE(SUM(tx_bytes),0) tx FROM interface_traffic_daily WHERE log_date=CURDATE() AND '.$trafficWhere, $trafficParams) ?? ['rx'=>0,'tx'=>0];
+        $interfaceCounters = Database::fetch('SELECT COALESCE(SUM(rx_bytes),0) rx,COALESCE(SUM(tx_bytes),0) tx FROM router_interfaces WHERE '.$trafficWhere, $trafficParams) ?? ['rx'=>0,'tx'=>0];
+        $trafficChart = Database::fetchAll('SELECT DATE_FORMAT(hour_start,"%H:00") label,SUM(rx_bytes) rx,SUM(tx_bytes) tx FROM interface_traffic_hourly WHERE hour_start>=DATE_SUB(NOW(),INTERVAL 23 HOUR) AND '.$trafficWhere.' GROUP BY hour_start ORDER BY hour_start', $trafficParams);
         $stats = [
             'total_users' => (int) (Database::fetch('SELECT COUNT(*) AS c FROM ppp_users')['c'] ?? 0),
             'active_users' => (int) (Database::fetch('SELECT COUNT(*) AS c FROM ppp_users WHERE status = "active"')['c'] ?? 0),
             'expired_users' => (int) (Database::fetch('SELECT COUNT(*) AS c FROM ppp_users WHERE status = "expired"')['c'] ?? 0),
             'online_users' => (int) (Database::fetch('SELECT COUNT(DISTINCT CONCAT(router_id, ":", username)) AS c FROM active_sessions WHERE last_seen_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)')['c'] ?? 0),
-            'traffic_in' => (int) (Database::fetch('SELECT COALESCE(SUM(bytes_in),0) AS c FROM traffic_logs WHERE log_date = CURDATE()')['c'] ?? 0),
-            'traffic_out' => (int) (Database::fetch('SELECT COALESCE(SUM(bytes_out),0) AS c FROM traffic_logs WHERE log_date = CURDATE()')['c'] ?? 0),
+            'traffic_in' => (int) $todayInterfaceTraffic['rx'],
+            'traffic_out' => (int) $todayInterfaceTraffic['tx'],
+            'interface_rx' => (int) $interfaceCounters['rx'],
+            'interface_tx' => (int) $interfaceCounters['tx'],
+            'traffic_counter_total' => (int) $interfaceCounters['rx'] + (int) $interfaceCounters['tx'],
             'revenue' => (float) (Database::fetch('SELECT COALESCE(SUM(amount),0) AS c FROM payments WHERE received_at >= DATE_FORMAT(CURDATE(), "%Y-%m-01")')['c'] ?? 0),
             'unpaid' => (float) (Database::fetch('SELECT COALESCE(SUM(i.total - COALESCE(p.paid,0)),0) AS c FROM invoices i LEFT JOIN (SELECT invoice_id,SUM(amount) paid FROM payments GROUP BY invoice_id) p ON p.invoice_id=i.id WHERE i.status IN ("unpaid","overdue")')['c'] ?? 0),
             'overdue' => (int) (Database::fetch('SELECT COUNT(*) AS c FROM invoices WHERE status = "overdue"')['c'] ?? 0),
         ];
         $routers = Database::fetchAll('SELECT * FROM routers WHERE is_active = 1 ORDER BY name');
         $recent = Database::fetchAll('SELECT l.*, a.username AS admin_name FROM activity_logs l LEFT JOIN admins a ON a.id=l.admin_id ORDER BY l.id DESC LIMIT 8');
-        render('dashboard', compact('stats', 'routers', 'recent') + ['pageTitle' => tr('داشبورد', 'Dashboard')]);
+        render('dashboard', compact('stats', 'routers', 'recent', 'trafficInterfaces', 'trafficSource', 'trafficChart') + ['pageTitle' => tr('داشبورد', 'Dashboard')]);
         break;
 
     case 'routers':

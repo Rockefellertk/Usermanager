@@ -424,6 +424,32 @@ function poll_router(int $routerId): array
     return ['sessions' => count($sessions)];
 }
 
+function poll_router_interfaces(int $routerId): array
+{
+    $router = router_by_id($routerId);
+    $interfaces = router_client($router)->listInterfaces();
+    $seen = 0;
+    foreach ($interfaces as $interface) {
+        $name = (string) ($interface['name'] ?? '');
+        if ($name === '') { continue; }
+        $type = (string) ($interface['type'] ?? '');
+        if (strtolower($name) !== 'internet' || !str_contains(strtolower($type), 'pppoe')) {
+            continue;
+        }
+        $rx = max(0, (int) ($interface['rx-byte'] ?? 0));
+        $tx = max(0, (int) ($interface['tx-byte'] ?? 0));
+        $running = in_array($interface['running'] ?? false, [true, 'true', 'yes'], true) ? 1 : 0;
+        $previous = Database::fetch('SELECT rx_bytes,tx_bytes FROM router_interfaces WHERE router_id=? AND interface_name=?', [$routerId, $name]);
+        $deltaRx = $previous ? ($rx >= (int) $previous['rx_bytes'] ? $rx - (int) $previous['rx_bytes'] : $rx) : 0;
+        $deltaTx = $previous ? ($tx >= (int) $previous['tx_bytes'] ? $tx - (int) $previous['tx_bytes'] : $tx) : 0;
+        Database::execute('INSERT INTO router_interfaces (router_id,interface_name,interface_type,is_running,rx_bytes,tx_bytes,last_seen_at) VALUES (?,?,?,?,?,?,NOW()) ON DUPLICATE KEY UPDATE interface_type=VALUES(interface_type),is_running=VALUES(is_running),rx_bytes=VALUES(rx_bytes),tx_bytes=VALUES(tx_bytes),last_seen_at=NOW()', [$routerId,$name,$type,$running,$rx,$tx]);
+        Database::execute('INSERT INTO interface_traffic_daily (router_id,interface_name,interface_type,log_date,rx_bytes,tx_bytes) VALUES (?,?,?,CURDATE(),?,?) ON DUPLICATE KEY UPDATE interface_type=VALUES(interface_type),rx_bytes=rx_bytes+VALUES(rx_bytes),tx_bytes=tx_bytes+VALUES(tx_bytes)', [$routerId,$name,$type,$deltaRx,$deltaTx]);
+        Database::execute('INSERT INTO interface_traffic_hourly (router_id,interface_name,interface_type,hour_start,rx_bytes,tx_bytes) VALUES (?,?,?,DATE_FORMAT(NOW(),"%Y-%m-%d %H:00:00"),?,?) ON DUPLICATE KEY UPDATE interface_type=VALUES(interface_type),rx_bytes=rx_bytes+VALUES(rx_bytes),tx_bytes=tx_bytes+VALUES(tx_bytes)', [$routerId,$name,$type,$deltaRx,$deltaTx]);
+        $seen++;
+    }
+    return ['interfaces' => $seen];
+}
+
 function expire_sweep(): int
 {
     $users = Database::fetchAll('SELECT * FROM ppp_users WHERE status = "active" AND expiration_date < CURDATE()');
@@ -455,6 +481,7 @@ function run_maintenance(): array
         $item = ['id' => (int) $router['id']];
         try {
             $item['poll'] = poll_router((int) $router['id']);
+            $item['interfaces'] = poll_router_interfaces((int) $router['id']);
             $lastSync = $router['last_sync_at'] ? strtotime((string) $router['last_sync_at']) : 0;
             if ($lastSync < time() - 900) {
                 $item['sync'] = sync_router((int) $router['id']);
@@ -465,5 +492,6 @@ function run_maintenance(): array
         $result['routers'][] = $item;
     }
     Database::execute('DELETE FROM active_sessions WHERE last_seen_at < DATE_SUB(NOW(), INTERVAL 20 MINUTE)');
+    Database::execute('DELETE FROM interface_traffic_hourly WHERE hour_start < DATE_SUB(NOW(), INTERVAL 31 DAY)');
     return $result;
 }

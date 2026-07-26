@@ -72,5 +72,8 @@ final class Database
                 self::execute('UPDATE plans SET router_id=? WHERE router_id IS NULL', [(int) $routers[0]['id']]);
             }
         }
+        self::execute('CREATE TABLE IF NOT EXISTS router_interfaces (router_id BIGINT UNSIGNED NOT NULL, interface_name VARCHAR(255) NOT NULL, interface_type VARCHAR(50) NOT NULL DEFAULT "", is_running TINYINT(1) NOT NULL DEFAULT 0, rx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0, tx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0, last_seen_at DATETIME NOT NULL, PRIMARY KEY (router_id,interface_name), KEY idx_interface_seen (last_seen_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+        self::execute('CREATE TABLE IF NOT EXISTS interface_traffic_daily (router_id BIGINT UNSIGNED NOT NULL, interface_name VARCHAR(255) NOT NULL, interface_type VARCHAR(50) NOT NULL DEFAULT "", log_date DATE NOT NULL, rx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0, tx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (router_id,interface_name,log_date), KEY idx_interface_traffic_date (log_date)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+        self::execute('CREATE TABLE IF NOT EXISTS interface_traffic_hourly (router_id BIGINT UNSIGNED NOT NULL, interface_name VARCHAR(255) NOT NULL, interface_type VARCHAR(50) NOT NULL DEFAULT "", hour_start DATETIME NOT NULL, rx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0, tx_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (router_id,interface_name,hour_start), KEY idx_interface_hour (hour_start)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     }
 }
