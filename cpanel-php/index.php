@@ -42,6 +42,25 @@ if ($route === 'language') {
 require_login();
 
 switch ($route) {
+    case 'live-sync':
+        require_write(); csrf_check();
+        header('Content-Type: application/json; charset=utf-8');
+        $result = [];
+        foreach (Database::fetchAll('SELECT id,last_sync_at FROM routers WHERE is_active=1') as $liveRouter) {
+            try {
+                $item = ['poll' => poll_router((int) $liveRouter['id'])];
+                $lastSync = $liveRouter['last_sync_at'] ? strtotime((string) $liveRouter['last_sync_at']) : 0;
+                if ($lastSync < time() - 60) {
+                    $item['sync'] = sync_router((int) $liveRouter['id']);
+                }
+                $result[(int) $liveRouter['id']] = $item;
+            } catch (Throwable $exception) {
+                $result[(int) $liveRouter['id']] = ['error' => $exception->getMessage()];
+            }
+        }
+        echo json_encode(['ok' => true, 'routers' => $result], JSON_UNESCAPED_UNICODE);
+        exit;
+
     case 'dashboard':
         overdue_sweep();
         $stats = [

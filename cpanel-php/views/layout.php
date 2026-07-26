@@ -5,10 +5,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light">
+    <?php if($authUser&&Auth::canWrite()):?><meta name="csrf-token" content="<?= e(csrf_token()) ?>"><meta name="live-sync-url" content="<?= e(url('live-sync')) ?>"><?php endif;?>
     <title><?= e($pageTitle ?? '') ?> · <?= e(config('app', 'name', 'UserManager')) ?></title>
     <link rel="stylesheet" href="public/style.css?v=1">
 </head>
-<body class="<?= $authUser ? 'app-shell' : 'guest-shell' ?>">
+<body class="<?= $authUser ? 'app-shell' : 'guest-shell' ?>" data-route="<?= e($route) ?>">
 <?php if ($authUser): ?>
 <header class="topbar">
     <button class="menu-toggle" type="button" aria-label="Menu" data-menu-toggle>☰</button>
@@ -47,6 +48,6 @@
     <?php foreach ($flashes as $flash): ?><div class="guest-alert alert <?= e($flash['type']) ?>"><?= e($flash['message']) ?></div><?php endforeach; ?>
     <?= $content ?>
 <?php endif; ?>
-<script src="public/app.js?v=1"></script>
+<script src="public/app.js?v=2"></script>
 </body>
 </html>

@@ -351,12 +351,22 @@ function sync_router(int $routerId): array
         }
     }
     $missingNames = array_diff(array_keys($localByName), array_keys($remoteByName));
-    if ($locals && count($missingNames) / count($locals) > 0.30) {
-        log_activity('sync_paused_suspected_restore', 'router', $routerId, ['missing' => count($missingNames), 'total' => count($locals)]);
-        Database::execute('UPDATE routers SET last_status = "online", last_sync_at = NOW() WHERE id = ?', [$routerId]);
-        return ['created' => $created, 'updated' => $updated, 'paused' => true, 'missing' => count($missingNames), 'catalogCount' => $catalogCount];
-    }
+    $managedMissingNames = [];
     foreach ($missingNames as $name) {
+        $missingLocal = $localByName[$name] ?? null;
+        if ($missingLocal && empty($missingLocal['password_encrypted'])) {
+            Database::execute('DELETE FROM ppp_users WHERE id = ?', [$missingLocal['id']]);
+            $missing++;
+        } else {
+            $managedMissingNames[] = $name;
+        }
+    }
+    if ($locals && count($managedMissingNames) / count($locals) > 0.30) {
+        log_activity('sync_paused_suspected_restore', 'router', $routerId, ['missing' => count($managedMissingNames), 'total' => count($locals)]);
+        Database::execute('UPDATE routers SET last_status = "online", last_sync_at = NOW() WHERE id = ?', [$routerId]);
+        return ['created' => $created, 'updated' => $updated, 'paused' => true, 'missing' => $missing + count($managedMissingNames), 'catalogCount' => $catalogCount];
+    }
+    foreach ($managedMissingNames as $name) {
         Database::execute('UPDATE ppp_users SET status = "missing_on_device" WHERE router_id = ? AND username = ?', [$routerId, $name]);
         $missing++;
     }
